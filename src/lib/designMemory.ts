@@ -195,6 +195,10 @@ function choosePlacement(feature: string, leadBrief: GardenBriefLead) {
     return "Existing shed zone";
   }
 
+  if (feature === "Pergola" && (leadBrief.existingFeatures ?? []).includes("Shed")) {
+    return "House-side patio zone";
+  }
+
   if (feature === "Pergola" && leadBrief.housePosition === "Along the left side") {
     return "Left house-side patio zone";
   }

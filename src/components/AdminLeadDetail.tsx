@@ -5,6 +5,7 @@ import { mockLeads } from "@/data/content";
 import { loadLeads, updateLead } from "@/data/storage";
 import type { GardenBriefLead, ProposalVersionKey, VisualAnchorMemory } from "@/data/types";
 import { calculateBudgetFit } from "@/lib/budgetRules";
+import { formatCurrency, validateConceptAgainstBudget } from "@/lib/costRules";
 import {
   createVersionDesignMemories,
   type DesignMemory,
@@ -91,6 +92,20 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
     );
   }, [designVersion, lead, selectedMemory]);
 
+  const manualProductionBrief = useMemo(() => {
+    if (!lead || !selectedMemory) {
+      return "";
+    }
+
+    return buildManualProductionBrief({
+      designVersion,
+      lead,
+      memory: selectedMemory,
+      photo: selectedPhoto,
+      visualAnchor: lead.visualAnchorMemory?.[getVersionKey(designVersion)] ?? null,
+    });
+  }, [designVersion, lead, selectedMemory, selectedPhoto]);
+
   function updateAiViewGuardrails(value: string) {
     if (!lead) {
       return;
@@ -129,6 +144,10 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
 
   async function copyGardenMappingPrompt() {
     await navigator.clipboard.writeText(gardenMappingPrompt);
+  }
+
+  async function copyManualProductionBrief() {
+    await navigator.clipboard.writeText(manualProductionBrief);
   }
 
   async function downloadPhoto(photo: NonNullable<GardenBriefLead["photos"]>[number]) {
@@ -220,6 +239,50 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
           onChange={(event) => updateAiViewGuardrails(event.target.value)}
           placeholder="Example: In the view looking back to the house, the right side of the image is open house-side access/circulation, not a boundary. Do not close it with fencing, raised planters or screening."
         />
+      </article>
+
+      <article className="memory-panel manual-production-panel">
+        <div className="photo-download-header">
+          <div>
+            <p className="eyebrow">Manual AI production brief</p>
+            <h3>Use this for Firefly/manual edits</h3>
+            <p>
+              A shorter, practical checklist for manually editing one client
+              image at a time. This keeps Jack in control instead of asking AI
+              to solve the full garden design in one pass.
+            </p>
+          </div>
+          <button className="button button-secondary" type="button" onClick={copyManualProductionBrief}>
+            Copy production brief
+          </button>
+        </div>
+        <div className="field-grid manual-production-controls">
+          <label>
+            Proposal version
+            <select
+              value={designVersion}
+              onChange={(event) => setDesignVersion(event.target.value as DesignVersion)}
+            >
+              {designVersions.map((version) => (
+                <option key={version}>{version}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Source photo
+            <select value={selectedPhotoId} onChange={(event) => setSelectedPhotoId(event.target.value)}>
+              <option value="">Select a photo view</option>
+              {lead.photos?.length
+                ? lead.photos.map((photo) => (
+                    <option key={photo.id} value={photo.id}>
+                      {photo.label || photo.fileName}
+                    </option>
+                  ))
+                : photoOptions.map((label) => <option key={label}>{label}</option>)}
+            </select>
+          </label>
+        </div>
+        <pre className="customer-summary manual-production-brief">{manualProductionBrief}</pre>
       </article>
 
       <div className="memory-layout">
@@ -487,6 +550,129 @@ function getExcludedForVersion(lead: GardenBriefLead, versionFeatures: string[])
   const requestedFeatures = lead.dreamVersionFeatures ?? [...lead.mustHaves, ...lead.niceToHaves];
 
   return requestedFeatures.filter((feature) => !versionFeatures.includes(feature));
+}
+
+function buildManualProductionBrief({
+  designVersion,
+  lead,
+  memory,
+  photo,
+  visualAnchor,
+}: {
+  designVersion: DesignVersion;
+  lead: GardenBriefLead;
+  memory: DesignMemory;
+  photo: NonNullable<GardenBriefLead["photos"]>[number] | null;
+  visualAnchor: VisualAnchorMemory | null;
+}) {
+  const budgetReality = validateConceptAgainstBudget(
+    {
+      features: memory.versionFeatures,
+      gardenSize: memory.gardenSize,
+      style: lead.preferredStyle || memory.customerStyle,
+    },
+    lead.budgetBand || memory.budgetBand,
+  );
+  const safeFeatures = getManualSafeFeatures(memory.versionFeatures, budgetReality);
+  const reservedFeatures = unique([
+    ...memory.versionFeatures.filter((feature) => !safeFeatures.includes(feature)),
+    ...getExcludedForVersion(lead, memory.versionFeatures),
+  ]);
+  const sourceFileName = photo ? buildPhotoDownloadName(photo) : "Select/download the labelled client photo first.";
+  const photoLabel = photo?.label || "Selected garden view";
+  const guardrails = lead.aiViewGuardrails || "Preserve all open access routes, doors, patio circulation, shed access and true boundary positions.";
+
+  return `Manual AI Production Brief
+
+Use this as the working checklist for Firefly/manual image editing. Do not ask AI to redesign the full garden in one pass.
+
+Proposal version:
+- ${designVersion}
+
+Source image:
+- Use labelled admin export: ${sourceFileName}
+- View label: ${photoLabel}
+- Original filename reference only: ${photo?.fileName || "Not selected"}
+
+Design direction:
+- Style: ${lead.preferredStyle || memory.customerStyle || "To be refined"}
+- Budget band: ${lead.budgetBand || memory.budgetBand}
+- Budget reality: ${budgetReality.budgetStatus}
+- Estimated typical scope from selected features: ${formatCurrency(budgetReality.estimatedTypical)}
+- Garden size/shape: ${memory.gardenSize}, ${memory.gardenShape}
+- Planting maintenance: ${memory.plantingMaintenance}
+- Planting colour direction: ${memory.plantingColourScheme}
+
+Manually add or enhance only these features:
+${bulletList(safeFeatures)}
+
+Reserve or avoid in this version:
+${bulletList(reservedFeatures)}
+
+Planting palette:
+- ${memory.plantingPalette.paletteSummary}
+- Preferred plants: ${formatList(memory.plantingPalette.preferredPlants)}
+- Avoid: ${formatList(memory.plantingPalette.avoidPlants)}
+
+Placement notes:
+${Object.entries(memory.lockedFeaturePlacements)
+  .map(([feature, placement]) => `- ${feature}: ${placement}`)
+  .join("\n") || "- No locked placements set."}
+
+Admin guardrails:
+- ${guardrails}
+- Do not block shed doors, house doors, side access, open circulation or patio routes.
+- Do not turn an open side into a closed boundary.
+- Do not add planters, fencing or screening where the source image shows open access.
+
+Approved visual anchor:
+${
+  visualAnchor
+    ? `- Use ${visualAnchor.imageFileName || "the approved concept image"} as the placement reference.
+- Anchor notes: ${visualAnchor.placementNotes}`
+    : "- No visual anchor locked yet. If one strong concept exists, use it as the design placement reference."
+}
+
+Short Firefly instruction:
+Edit this exact source image only. Preserve the house, shed, doors, boundaries, patio, lawn shape, access routes and camera angle. Apply a ${lead.preferredStyle || memory.customerStyle || "premium contemporary"} Anthēon Outdoor direction using only the manually approved features above. Keep the result realistic, buildable and aligned to the selected budget. Do not add structures, fences, planters or premium features from the reserved list.
+
+QC before uploading:
+- Same camera angle and source view retained.
+- No boundaries swapped or invented.
+- Shed/door/side access remains clear.
+- Only approved features are visible.
+- Reserved features are not shown.
+- No duplicated pergola, seating zone, planter run, fire pit or kitchen.
+- Image looks premium but still buildable.`;
+}
+
+function getManualSafeFeatures(
+  features: string[],
+  budgetReality: ReturnType<typeof validateConceptAgainstBudget>,
+) {
+  if (
+    budgetReality.budgetStatus !== "Impossible For Budget" &&
+    budgetReality.budgetStatus !== "Likely Over Budget"
+  ) {
+    return features;
+  }
+
+  const reserved = new Set([...budgetReality.blockedFeatures, ...budgetReality.cautionFeatures]);
+  const safe = features.filter((feature) => !reserved.has(feature));
+
+  return safe.length
+    ? safe
+    : features.filter((feature) =>
+        ["Seating area", "Low-maintenance planting", "Real lawn", "Pathway", "Storage"].includes(feature),
+      );
+}
+
+function bulletList(items: string[]) {
+  return items.length ? items.map((item) => `- ${item}`).join("\n") : "- None specified";
+}
+
+function unique(items: string[]) {
+  return Array.from(new Set(items.filter(Boolean)));
 }
 
 function getVersionKey(designVersion: DesignVersion): ProposalVersionKey {

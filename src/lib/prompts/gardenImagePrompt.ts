@@ -1,5 +1,9 @@
 import type { DesignMemory, DesignVersion } from "@/lib/designMemory";
-import { getBudgetRealityGuardrails, validateConceptAgainstBudget } from "@/lib/costRules";
+import {
+  getBudgetRealityGuardrails,
+  validateConceptAgainstBudget,
+  type BudgetRealityStatus,
+} from "@/lib/costRules";
 import type { GardenPhotoLabel, VisualAnchorMemory } from "@/data/types";
 
 type GardenImagePromptInput = {
@@ -52,6 +56,13 @@ export function buildGardenImagePrompt({
     features: approvedFeatures,
     style: style || designMemory.customerStyle,
   });
+  const generationFeatures = getBudgetSafeGenerationFeatures({
+    approvedFeatures,
+    cautionFeatures: budgetReality.cautionFeatures,
+    blockedFeatures: budgetReality.blockedFeatures,
+    budgetStatus: budgetReality.budgetStatus,
+  });
+  const reservedForBudget = approvedFeatures.filter((feature) => !generationFeatures.includes(feature));
 
   return `Create a realistic, buildable Anthēon Outdoor garden concept for the ${designVersion} proposal.
 
@@ -99,6 +110,13 @@ Design memory is the single source of truth:
 Locked feature placements:
 ${placements || "- No locked feature placements yet."}
 
+PLACEMENT SANITY CHECK:
+- Existing shed zone means the shed/access area. Do not place a pergola, raised planter, seating block or fence in front of shed doors or across shed access.
+- If "Pergola" is locked to "Existing shed zone", treat that as an invalid placement unless the customer explicitly requested replacing the shed. Reserve the pergola or move it to a valid house-side patio only if visible and budget-realistic.
+- Raised planters on "Rear boundary only" must stay on the rear boundary. Do not place them in front of shed doors, house doors, side access, open circulation routes or patio access.
+- Fencing should only appear on real existing boundary lines. Do not invent extra fence runs inside the garden or along open house-side circulation.
+- Keep a clear route to the shed, house doors and patio.
+
 Spatial instructions:
 ${spatial}
 
@@ -111,7 +129,12 @@ ${duplicates}
 - Do not add features excluded from this version.
 
 Version feature scope:
-- Approved features: ${list(approvedFeatures)}
+- Budget-safe features to generate in this image: ${list(generationFeatures)}
+- Features reserved because the selected version/budget is over scope: ${list([
+    ...reservedForBudget,
+    ...excludedFeatures,
+  ])}
+- Original requested/approved features before budget correction: ${list(approvedFeatures)}
 - Caution features requiring careful specification: ${list(cautionFeatures)}
 - Excluded/reserved features: ${list(excludedFeatures)}
 - Budget reality status: ${budgetReality.budgetStatus}
@@ -124,6 +147,7 @@ ${customerNotes || "No additional customer notes provided."}
 
 Design quality:
 - Respect the selected budget band and proposal version.
+- Generate only the budget-safe features listed above. Do not visually include features reserved because the selected version/budget is over scope.
 - Keep the design premium, calm, practical and buildable.
 - If a feature is not realistic for this budget band, reserve it for Enhanced/Dream instead of showing it.
 - If this concept includes blocked features for the selected budget, treat it as a failed concept and regenerate.
@@ -133,6 +157,33 @@ Design quality:
 
 function list(items: string[]) {
   return items.length ? items.join(", ") : "None specified";
+}
+
+function getBudgetSafeGenerationFeatures({
+  approvedFeatures,
+  blockedFeatures,
+  budgetStatus,
+  cautionFeatures,
+}: {
+  approvedFeatures: string[];
+  blockedFeatures: string[];
+  budgetStatus: BudgetRealityStatus;
+  cautionFeatures: string[];
+}) {
+  if (budgetStatus !== "Impossible For Budget" && budgetStatus !== "Likely Over Budget") {
+    return approvedFeatures;
+  }
+
+  const reserved = new Set([...blockedFeatures, ...cautionFeatures]);
+  const budgetSafe = approvedFeatures.filter((feature) => !reserved.has(feature));
+
+  if (budgetSafe.length) {
+    return budgetSafe;
+  }
+
+  return approvedFeatures.filter((feature) =>
+    ["Seating area", "Low-maintenance planting", "Real lawn", "Pathway", "Storage"].includes(feature),
+  );
 }
 
 function buildLabelledPhotoFileName(photo: GardenPhotoLabel) {

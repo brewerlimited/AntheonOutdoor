@@ -1619,6 +1619,24 @@ textarea {
   max-height: 320px;
 }
 
+.manual-production-panel {
+  background: rgba(244, 239, 230, 0.46);
+  margin-bottom: 18px;
+}
+
+.manual-production-controls {
+  margin-top: 22px;
+}
+
+.manual-production-brief {
+  background: rgba(255, 253, 248, 0.78);
+  border: 1px solid rgba(155, 122, 79, 0.16);
+  color: var(--charcoal);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.84rem;
+  max-height: 560px;
+}
+
 .photo-download-header {
   align-items: start;
   display: flex;
