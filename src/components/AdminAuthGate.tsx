@@ -95,8 +95,8 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
           <p className="eyebrow">Private admin</p>
           <h2>Admin access only.</h2>
           <p>
-            Sign in with the Anthēon admin account to view leads, design memory
-            and proposal packs.
+            Sign in with the Anthēon admin account to view leads, layout
+            preparation notes and proposal packs.
           </p>
           <div className="button-row">
             <Link className="button button-primary" href="/admin/login">

@@ -74,7 +74,7 @@ export function AdminLeads() {
                   {lead.styleQuizResult ? <span>Quiz: {lead.styleQuizResult.styleName}</span> : null}
                 </td>
                 <td data-label="Proposal">
-                  <StatusBadge>{lead.proposalStatus ?? "Design Memory Created"}</StatusBadge>
+                  <StatusBadge>{lead.proposalStatus ?? "Brief Received"}</StatusBadge>
                 </td>
                 <td data-label="Images">{getImageStatusSummary(lead)}</td>
                 <td data-label="Sent">
@@ -83,7 +83,7 @@ export function AdminLeads() {
                 <td data-label="Actions">
                   <div className="table-actions">
                     <Link className="text-link" href={`/admin/leads/${lead.id}`}>
-                      Memory
+                      Studio
                     </Link>
                     <Link className="text-link" href={`/admin/leads/${lead.id}/proposal`}>
                       Proposal
@@ -117,7 +117,7 @@ function withBudgetFallback(lead: GardenBriefLead): GardenBriefLead {
 
   const leadWithBudget = {
     ...lead,
-    proposalStatus: lead.proposalStatus ?? "Design Memory Created",
+    proposalStatus: lead.proposalStatus ?? "Brief Received",
     approvedMustHaves: fit.approvedMustHaves,
     cautionMustHaves: fit.cautionMustHaves,
     excludedMustHaves: fit.excludedMustHaves,

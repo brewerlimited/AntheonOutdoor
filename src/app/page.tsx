@@ -184,9 +184,9 @@ export default function Home() {
             Your selected investment level shapes what belongs in the focused,
             enhanced and dream versions.
           </FeatureCard>
-          <FeatureCard title="One design memory">
-            Multiple photos are treated as one coherent garden, so features are
-            placed consistently rather than repeated in every view.
+          <FeatureCard title="Prepared with care">
+            Labelled photos, address context and your priorities help us prepare
+            a clearer consultation direction before visuals are refined.
           </FeatureCard>
           <FeatureCard title="Review before refinement">
             Early concepts stay honest: visual direction first, with final scope

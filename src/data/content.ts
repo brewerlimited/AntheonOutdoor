@@ -190,7 +190,7 @@ export const mockLeads: GardenBriefLead[] = [
     existingFeatures: ["Existing patio", "Lawn", "Existing fencing"],
     layoutNotes: "Side access is available on the left.",
     notes: "Mock lead for frontend admin preview.",
-    proposalStatus: "Design Memory Created",
+    proposalStatus: "Brief Received",
     proposalImages: {
       withinBudget: {
         imageNotes: "",

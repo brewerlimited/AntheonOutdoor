@@ -24,6 +24,14 @@ export type ProposalPack = {
   projectSummary: string;
   designStyleSummary: string;
   budgetSummary: string;
+  layoutReviewSummary: string;
+  featurePlacementSummary: string;
+  existingPlanSummary: string;
+  scaleSummary: string;
+  layoutConceptSummary: string;
+  finalLayoutSummary: string;
+  masterplanSummary: string;
+  heroRenderSummary: string;
   withinBudget: ProposalVersion;
   enhancedDesign: ProposalVersion;
   dreamVersion: ProposalVersion;
@@ -35,7 +43,9 @@ export const proposalChecklistItems = [
   "Budget band checked",
   "Features match selected version",
   "No duplicated major features",
-  "Design memory reviewed",
+  "Layout preparation reviewed",
+  "Feature placement notes reviewed",
+  "Plan sketch considered",
   "Excluded features not shown in Within Budget",
   "Dream Version marked as potentially above budget",
   "Customer notes considered",
@@ -73,6 +83,14 @@ export function buildProposalPack(leadBrief: GardenBriefLead): ProposalPack {
     projectSummary: buildProjectSummary(enrichedLead),
     designStyleSummary: buildStyleSummary(enrichedLead),
     budgetSummary: `${enrichedLead.budgetBand || "Investment level to be discussed"}. ${enrichedLead.budgetGuidance ?? fit.budgetGuidance}`,
+    layoutReviewSummary: buildLayoutReviewSummary(enrichedLead),
+    featurePlacementSummary: buildFeaturePlacementSummary(enrichedLead),
+    existingPlanSummary: buildExistingPlanSummary(enrichedLead),
+    scaleSummary: buildScaleSummary(enrichedLead),
+    layoutConceptSummary: buildLayoutConceptSummary(enrichedLead),
+    finalLayoutSummary: buildFinalLayoutSummary(enrichedLead),
+    masterplanSummary: buildMasterplanSummary(enrichedLead),
+    heroRenderSummary: buildHeroRenderSummary(enrichedLead),
     withinBudget: buildVersion({
       title: "Within Budget",
       investmentLevel: enrichedLead.budgetBand,
@@ -164,7 +182,9 @@ function buildVersion({
 }
 
 function buildProjectSummary(lead: GardenBriefLead) {
-  return `${lead.projectType || "Garden project"} for a ${lead.gardenSize || "size to be confirmed"}, ${lead.gardenShape || "shape to be confirmed"} garden. House position: ${lead.housePosition || "to be confirmed"}.`;
+  const prep = lead.adminLayoutPreparation;
+
+  return `${lead.projectType || "Garden project"} for a garden reviewed from the customer brief, labelled photos and address context. Shape: ${prep?.gardenShape || lead.gardenShape || "to be confirmed"}. House position: ${prep?.housePosition || lead.housePosition || "to be confirmed"}.`;
 }
 
 function buildStyleSummary(lead: GardenBriefLead) {
@@ -178,6 +198,82 @@ function getReservedFeatures(lead: GardenBriefLead, includedFeatures: string[]) 
   const requested = lead.dreamVersionFeatures ?? [...lead.mustHaves, ...lead.niceToHaves];
 
   return requested.filter((feature) => !includedFeatures.includes(feature));
+}
+
+function buildLayoutReviewSummary(lead: GardenBriefLead) {
+  const prep = lead.adminLayoutPreparation;
+
+  if (!prep) {
+    return "Layout review to be prepared from the address, labelled photos and Jack's plan sketch.";
+  }
+
+  return [
+    prep.googleMapsReviewNotes ? `Google Maps: ${prep.googleMapsReviewNotes}` : "",
+    prep.existingLayoutNotes ? `Existing layout: ${prep.existingLayoutNotes}` : "",
+    prep.constraintsAccessNotes ? `Constraints/access: ${prep.constraintsAccessNotes}` : "",
+    prep.sketchNotes ? `Sketch notes: ${prep.sketchNotes}` : "",
+    prep.initialPlanDirectionNotes ? `Plan direction: ${prep.initialPlanDirectionNotes}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ") || "Layout review to be prepared from the address, labelled photos and Jack's plan sketch.";
+}
+
+function buildFeaturePlacementSummary(lead: GardenBriefLead) {
+  if (!lead.featurePlacementNotes?.length) {
+    return "Feature placement notes to be prepared before consultation.";
+  }
+
+  return lead.featurePlacementNotes
+    .map((note) => `${note.feature}: ${note.placement}`)
+    .join("; ");
+}
+
+function buildExistingPlanSummary(lead: GardenBriefLead) {
+  const plan = lead.existingGardenPlan;
+
+  if (!plan) {
+    return "Existing garden plan not uploaded yet.";
+  }
+
+  return `${plan.image?.fileName || "Plan image to be uploaded"} from ${plan.source || "source not recorded"}. ${plan.notes || ""}`.trim();
+}
+
+function buildScaleSummary(lead: GardenBriefLead) {
+  const scale = lead.scaleInformation;
+
+  if (!scale) {
+    return "Scale information not recorded yet.";
+  }
+
+  return `${scale.gardenWidth || "?"} x ${scale.gardenLength || "?"} ${scale.unit || ""}. Area: ${scale.calculatedArea ? `${scale.calculatedArea} sq ${scale.unit || ""}` : "not calculated"}. ${scale.scaleNotes || ""}`.trim();
+}
+
+function buildLayoutConceptSummary(lead: GardenBriefLead) {
+  if (!lead.layoutConcepts?.length) {
+    return "AI layout concepts A/B/C not recorded yet.";
+  }
+
+  return lead.layoutConcepts
+    .map((concept) => `Concept ${concept.id}: ${concept.conceptName || "Unnamed"} (${concept.status})`)
+    .join("; ");
+}
+
+function buildFinalLayoutSummary(lead: GardenBriefLead) {
+  const final = lead.finalLayoutDirection;
+
+  if (!final) {
+    return "Final layout direction not selected yet.";
+  }
+
+  return `${final.selectedConceptSource || "No source selected"}: ${final.finalLayoutSummary || "summary to be written"}`;
+}
+
+function buildMasterplanSummary(lead: GardenBriefLead) {
+  return `${lead.masterplan?.status || "Not Started"}: ${lead.masterplan?.notes || "Final masterplan not uploaded yet."}`;
+}
+
+function buildHeroRenderSummary(lead: GardenBriefLead) {
+  return `${lead.heroRender?.renderStatus || "Not Started"}: ${lead.heroRender?.notes || "Hero render not prepared yet."}`;
 }
 
 function placementSummary(placements: Record<string, string>) {

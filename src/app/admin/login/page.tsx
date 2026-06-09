@@ -7,8 +7,8 @@ export default function AdminLoginPage() {
         <p className="eyebrow">Admin login</p>
         <h1>Private workspace.</h1>
         <p>
-          Sign in to review Anthēon garden briefs, design memory and proposal
-          packs.
+          Sign in to review Anthēon garden briefs, layout preparation notes and
+          proposal packs.
         </p>
       </section>
       <AdminLogin />

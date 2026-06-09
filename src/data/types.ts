@@ -51,6 +51,90 @@ export type VisualAnchorMemory = {
   approvedAt: string;
 };
 
+export type AdminGardenLayoutPreparation = {
+  gardenShape?: string;
+  approximateLength?: string;
+  approximateWidth?: string;
+  unit?: "metres" | "feet" | "";
+  housePosition?: string;
+  googleMapsReviewNotes?: string;
+  existingLayoutNotes?: string;
+  constraintsAccessNotes?: string;
+  sketchNotes?: string;
+  initialPlanDirectionNotes?: string;
+};
+
+export type FeaturePlacementNote = {
+  feature: string;
+  priority: "Must-have" | "Nice-to-have";
+  budgetStatus: "Suitable" | "Caution" | "Better for enhanced/dream";
+  placement: string;
+  note: string;
+};
+
+export type ExistingGardenPlan = {
+  image?: ProposalImageAsset;
+  notes?: string;
+  source?: "Google Maps" | "Bing Maps" | "Manual" | "Other" | "";
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type ScaleInformation = {
+  gardenWidth?: string;
+  gardenLength?: string;
+  unit?: "metres" | "feet" | "";
+  calculatedArea?: number;
+  scaleNotes?: string;
+};
+
+export type LayoutConceptStatus = "Draft" | "Shortlisted" | "Rejected" | "Selected" | "Merged";
+
+export type LayoutConcept = {
+  id: "A" | "B" | "C";
+  conceptName: string;
+  designIntent: string;
+  layoutSummary: string;
+  keyFeatures: string;
+  featurePlacements: string;
+  whyItFitsBudget: string;
+  whyItFitsStyle: string;
+  risksOrWatchouts: string;
+  jackNotes: string;
+  status: LayoutConceptStatus;
+};
+
+export type FinalLayoutDirection = {
+  selectedConceptSource?: "Concept A" | "Concept B" | "Concept C" | "Merge" | "Manual" | "";
+  finalLayoutSummary?: string;
+  finalFeaturePlacements?: string;
+  finalBudgetNotes?: string;
+  finalStyleNotes?: string;
+  finalRisks?: string;
+  readyForMasterplan?: boolean;
+};
+
+export type MasterplanStatus = "Not Started" | "Sketch Required" | "AI Enhanced" | "Reviewed" | "Approved";
+
+export type Masterplan = {
+  image?: ProposalImageAsset;
+  notes?: string;
+  status?: MasterplanStatus;
+};
+
+export type HeroRenderStatus =
+  | "Not Started"
+  | "Prompt Prepared"
+  | "Generated Manually"
+  | "Needs Revision"
+  | "Approved";
+
+export type HeroRender = {
+  image?: ProposalImageAsset;
+  notes?: string;
+  renderStatus?: HeroRenderStatus;
+};
+
 export type GardenPhotoLabel = {
   id: string;
   fileName: string;
@@ -114,6 +198,15 @@ export type GardenBriefLead = {
   proposalImages?: Partial<Record<ProposalVersionKey, ProposalImageAsset>>;
   visualAnchorMemory?: Partial<Record<ProposalVersionKey, VisualAnchorMemory>>;
   aiViewGuardrails?: string;
+  adminLayoutPreparation?: AdminGardenLayoutPreparation;
+  featurePlacementNotes?: FeaturePlacementNote[];
+  planSketchImage?: ProposalImageAsset;
+  existingGardenPlan?: ExistingGardenPlan;
+  scaleInformation?: ScaleInformation;
+  layoutConcepts?: LayoutConcept[];
+  finalLayoutDirection?: FinalLayoutDirection;
+  masterplan?: Masterplan;
+  heroRender?: HeroRender;
   approvedMustHaves?: string[];
   cautionMustHaves?: string[];
   excludedMustHaves?: string[];

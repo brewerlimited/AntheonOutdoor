@@ -12,10 +12,10 @@ export default async function AdminLeadDetailPage({
     <main>
       <section className="page-hero compact">
         <p className="eyebrow">Admin review</p>
-        <h1>Design Memory.</h1>
+        <h1>Design Studio.</h1>
         <p>
-          Design Memory controls feature placement across all visual concepts
-          and prevents duplicated features between views.
+          Prepare the existing plan, scale, layout concepts, final masterplan
+          and one hero render for the customer consultation pack.
         </p>
       </section>
       <AdminAuthGate>

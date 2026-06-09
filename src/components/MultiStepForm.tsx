@@ -42,7 +42,6 @@ const initialForm = {
 const stepTitles = [
   "Your details",
   "Project direction",
-  "Garden Layout",
   "Features",
   "Photos & notes",
 ];
@@ -58,16 +57,6 @@ const photoLabelOptions = [
   "Other",
 ];
 
-const gardenShapeOptions = [
-  "Rectangular",
-  "Square",
-  "L-shaped",
-  "Narrow / long",
-  "Wide / shallow",
-  "Unsure",
-];
-
-const gardenSizeOptions: GardenSize[] = ["Small", "Medium", "Large", "Unsure"];
 const plantingMaintenanceOptions: PlantingMaintenance[] = [
   "Low maintenance",
   "Medium maintenance",
@@ -83,26 +72,6 @@ const plantingColourSchemeOptions: PlantingColourScheme[] = [
   "Bold seasonal colour",
   "Natural meadow mix",
   "Not sure",
-];
-
-const housePositionOptions = [
-  "At the front of the garden",
-  "Along the left side",
-  "Along the right side",
-  "Unsure",
-];
-
-const existingFeatureOptions = [
-  "Existing patio",
-  "Shed",
-  "Lawn",
-  "Trees",
-  "Level changes",
-  "Drainage issues",
-  "Side access",
-  "Existing fencing",
-  "Existing decking",
-  "None / blank canvas",
 ];
 
 export function MultiStepForm() {
@@ -152,7 +121,7 @@ export function MultiStepForm() {
   }
 
   function toggleListField(
-    name: "mustHaves" | "niceToHaves" | "existingFeatures",
+    name: "mustHaves" | "niceToHaves",
     feature: string,
   ) {
     setForm((current) => {
@@ -363,6 +332,10 @@ export function MultiStepForm() {
                 value={form.address}
                 onChange={(event) => updateField("address", event.target.value)}
               />
+              <span className="helper-text">
+                Your address helps us review the approximate garden layout using
+                mapping tools before your consultation.
+              </span>
             </label>
           </div>
         </div>
@@ -458,71 +431,6 @@ export function MultiStepForm() {
 
       {step === 2 ? (
         <div className="form-panel">
-          <h2>Garden Layout</h2>
-          <p>
-            Help us understand how your garden is laid out so we can create a
-            more consistent design direction from your photos.
-          </p>
-          <div className="field-grid">
-            <label>
-              Approximate garden size
-              <select
-                value={form.gardenSize}
-                onChange={(event) =>
-                  updateField("gardenSize", event.target.value as GardenSize)
-                }
-              >
-                <option value="">Select a size</option>
-                {gardenSizeOptions.map((option) => (
-                  <option key={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Garden shape
-              <select
-                value={form.gardenShape}
-                onChange={(event) => updateField("gardenShape", event.target.value)}
-              >
-                <option value="">Select a shape</option>
-                {gardenShapeOptions.map((option) => (
-                  <option key={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Where is the house in relation to the garden?
-              <select
-                value={form.housePosition}
-                onChange={(event) => updateField("housePosition", event.target.value)}
-              >
-                <option value="">Select a position</option>
-                {housePositionOptions.map((option) => (
-                  <option key={option}>{option}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <FeatureChecklist
-            label="Existing features"
-            options={existingFeatureOptions}
-            values={form.existingFeatures}
-            onToggle={(feature) => toggleListField("existingFeatures", feature)}
-          />
-          <label>
-            Notes about layout/access
-            <textarea
-              rows={4}
-              value={form.layoutNotes}
-              onChange={(event) => updateField("layoutNotes", event.target.value)}
-              placeholder="Tell us about side access, level changes, overlooked boundaries or anything that affects the layout."
-            />
-          </label>
-        </div>
-      ) : null}
-
-      {step === 3 ? (
-        <div className="form-panel">
           <h2>Features</h2>
           <FeatureChecklist
             label="Must-have features"
@@ -550,7 +458,7 @@ export function MultiStepForm() {
         </div>
       ) : null}
 
-      {step === 4 ? (
+      {step === 3 ? (
         <div className="form-panel">
           <h2>Photos & notes</h2>
           <label>
@@ -574,8 +482,8 @@ export function MultiStepForm() {
             <span>Garden photos / videos</span>
             <strong>Local photo labelling</strong>
             <p>
-              Add garden photos and label each view so the space can be read as
-              one coherent garden.
+              Please have images ready to upload. Add garden photos and label
+              each view so we can prepare your consultation more accurately.
             </p>
             <input
               accept="image/*,video/*"
@@ -649,7 +557,7 @@ export function MultiStepForm() {
               setStep((current) => Math.min(stepTitles.length - 1, current + 1));
             }}
           >
-            {step === 3 ? "Continue to photos" : "Continue"}
+            {step === 2 ? "Continue to photos" : "Continue"}
           </Button>
         ) : (
           <Button type="submit">Prepare Garden Brief</Button>

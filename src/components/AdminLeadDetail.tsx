@@ -3,7 +3,17 @@
 import { useEffect, useMemo, useState } from "react";
 import { mockLeads } from "@/data/content";
 import { loadLeads, updateLead } from "@/data/storage";
-import type { GardenBriefLead, ProposalVersionKey, VisualAnchorMemory } from "@/data/types";
+import type {
+  FeaturePlacementNote,
+  GardenBriefLead,
+  HeroRenderStatus,
+  LayoutConcept,
+  LayoutConceptStatus,
+  MasterplanStatus,
+  ProposalImageAsset,
+  ProposalVersionKey,
+  VisualAnchorMemory,
+} from "@/data/types";
 import { calculateBudgetFit } from "@/lib/budgetRules";
 import { formatCurrency, validateConceptAgainstBudget } from "@/lib/costRules";
 import {
@@ -12,9 +22,60 @@ import {
   type DesignVersion,
   placementOptions,
 } from "@/lib/designMemory";
+import { calculateArea, defaultLayoutConcepts } from "@/lib/designStudio";
+import {
+  buildDesignConceptPrompt,
+  buildHeroRenderPrompt,
+} from "@/lib/prompts/designConceptPrompt";
 import { buildGardenImagePrompt } from "@/lib/prompts/gardenImagePrompt";
+import { getStyleGuide } from "@/lib/styleGuides";
 
 const designVersions: DesignVersion[] = ["Within Budget", "Enhanced Design", "Dream Version"];
+const adminGardenShapeOptions = [
+  "Rectangular",
+  "Square",
+  "L-shaped",
+  "Narrow / long",
+  "Wide / shallow",
+  "Irregular",
+  "Unsure",
+];
+const adminHousePositionOptions = ["House at front", "House on left", "House on right", "Unsure"];
+const adminPlacementOptions = [
+  "Near house / patio doors",
+  "Rear boundary",
+  "Left boundary",
+  "Right boundary",
+  "Rear-left corner",
+  "Rear-right corner",
+  "Central garden",
+  "Existing patio zone",
+  "Not included in this version",
+  "Unsure / discuss on call",
+];
+const existingPlanSources = ["Google Maps", "Bing Maps", "Manual", "Other"];
+const layoutConceptStatuses: LayoutConceptStatus[] = [
+  "Draft",
+  "Shortlisted",
+  "Rejected",
+  "Selected",
+  "Merged",
+];
+const finalLayoutSources = ["Concept A", "Concept B", "Concept C", "Merge", "Manual"];
+const masterplanStatuses: MasterplanStatus[] = [
+  "Not Started",
+  "Sketch Required",
+  "AI Enhanced",
+  "Reviewed",
+  "Approved",
+];
+const heroRenderStatuses: HeroRenderStatus[] = [
+  "Not Started",
+  "Prompt Prepared",
+  "Generated Manually",
+  "Needs Revision",
+  "Approved",
+];
 
 export function AdminLeadDetail({ leadId }: { leadId: string }) {
   const [lead, setLead] = useState<GardenBriefLead | null>(null);
@@ -54,6 +115,16 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
     return lead.photos.find((photo) => photo.id === selectedPhotoId) ?? null;
   }, [lead, selectedPhotoId]);
 
+  const selectedStyleGuide = useMemo(
+    () => getStyleGuide(lead?.preferredStyle || selectedMemory?.customerStyle || ""),
+    [lead?.preferredStyle, selectedMemory?.customerStyle],
+  );
+
+  const featurePlacementNotes = useMemo(
+    () => (lead ? buildFeaturePlacementRows(lead) : []),
+    [lead],
+  );
+
   const prompt = useMemo(() => {
     if (!lead || !selectedMemory) {
       return "";
@@ -76,8 +147,11 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
       currentPhoto: selectedPhoto,
       visualAnchor: lead.visualAnchorMemory?.[getVersionKey(designVersion)] ?? null,
       aiViewGuardrails: lead.aiViewGuardrails,
+      adminLayoutPreparation: lead.adminLayoutPreparation,
+      featurePlacementNotes: featurePlacementNotes,
+      planSketchAvailable: Boolean(lead.planSketchImage?.previewUrl || lead.planSketchImage?.imageUrl),
     });
-  }, [designVersion, lead, selectedMemory, selectedPhoto, selectedPhotoId]);
+  }, [designVersion, featurePlacementNotes, lead, selectedMemory, selectedPhoto, selectedPhotoId]);
 
   const gardenMappingPrompt = useMemo(() => {
     if (!lead || !selectedMemory) {
@@ -103,8 +177,29 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
       memory: selectedMemory,
       photo: selectedPhoto,
       visualAnchor: lead.visualAnchorMemory?.[getVersionKey(designVersion)] ?? null,
+      featurePlacementNotes,
     });
-  }, [designVersion, lead, selectedMemory, selectedPhoto]);
+  }, [designVersion, featurePlacementNotes, lead, selectedMemory, selectedPhoto]);
+
+  const designConceptPrompt = useMemo(() => {
+    if (!lead) {
+      return "";
+    }
+
+    return buildDesignConceptPrompt({
+      lead,
+      scaleInfo: lead.scaleInformation,
+      styleGuide: selectedStyleGuide,
+    });
+  }, [lead, selectedStyleGuide]);
+
+  const heroRenderPrompt = useMemo(() => {
+    if (!lead) {
+      return "";
+    }
+
+    return buildHeroRenderPrompt({ lead, styleGuide: selectedStyleGuide });
+  }, [lead, selectedStyleGuide]);
 
   function updateAiViewGuardrails(value: string) {
     if (!lead) {
@@ -114,6 +209,205 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
     const updatedLead: GardenBriefLead = {
       ...lead,
       aiViewGuardrails: value,
+    };
+
+    setLead(updatedLead);
+    void updateLead(updatedLead);
+  }
+
+  function updateAdminLayoutField(
+    field: keyof NonNullable<GardenBriefLead["adminLayoutPreparation"]>,
+    value: string,
+  ) {
+    if (!lead) {
+      return;
+    }
+
+    const updatedLead: GardenBriefLead = {
+      ...lead,
+      adminLayoutPreparation: {
+        ...lead.adminLayoutPreparation,
+        [field]: value,
+      },
+    };
+
+    setLead(updatedLead);
+    void updateLead(updatedLead);
+  }
+
+  function updateFeaturePlacementNote(
+    feature: string,
+    updates: Partial<FeaturePlacementNote>,
+  ) {
+    if (!lead) {
+      return;
+    }
+
+    const rows = buildFeaturePlacementRows(lead);
+    const nextRows = rows.map((row) =>
+      row.feature === feature ? { ...row, ...updates } : row,
+    );
+    const updatedLead: GardenBriefLead = {
+      ...lead,
+      featurePlacementNotes: nextRows,
+    };
+
+    setLead(updatedLead);
+    void updateLead(updatedLead);
+  }
+
+  function updateExistingPlanImage(files: FileList | null) {
+    const file = files?.[0];
+
+    if (!lead || !file) {
+      return;
+    }
+
+    updateLeadState({
+      existingGardenPlan: {
+        ...lead.existingGardenPlan,
+        image: createLocalImageAsset(file, "Cleaned-up existing garden plan."),
+        updatedAt: new Date().toISOString(),
+        createdAt: lead.existingGardenPlan?.createdAt ?? new Date().toISOString(),
+      },
+    });
+  }
+
+  function updateExistingPlanField(field: "notes" | "source", value: string) {
+    if (!lead) {
+      return;
+    }
+
+    updateLeadState({
+      existingGardenPlan: {
+        ...lead.existingGardenPlan,
+        [field]: value,
+        updatedAt: new Date().toISOString(),
+        createdAt: lead.existingGardenPlan?.createdAt ?? new Date().toISOString(),
+      },
+    });
+  }
+
+  function updateScaleField(field: "gardenWidth" | "gardenLength" | "unit" | "scaleNotes", value: string) {
+    if (!lead) {
+      return;
+    }
+
+    const nextScale = {
+      ...lead.scaleInformation,
+      [field]: value,
+    };
+
+    updateLeadState({
+      scaleInformation: {
+        ...nextScale,
+        calculatedArea: calculateArea(nextScale),
+      },
+    });
+  }
+
+  function updateConcept(
+    conceptId: LayoutConcept["id"],
+    updates: Partial<LayoutConcept>,
+  ) {
+    if (!lead) {
+      return;
+    }
+
+    const concepts = getLayoutConcepts(lead).map((concept) =>
+      concept.id === conceptId
+        ? {
+            ...concept,
+            ...updates,
+          }
+        : concept,
+    );
+
+    updateLeadState({ layoutConcepts: concepts });
+  }
+
+  function updateFinalLayoutField(
+    field: keyof NonNullable<GardenBriefLead["finalLayoutDirection"]>,
+    value: string | boolean,
+  ) {
+    if (!lead) {
+      return;
+    }
+
+    updateLeadState({
+      finalLayoutDirection: {
+        ...lead.finalLayoutDirection,
+        [field]: value,
+      },
+    });
+  }
+
+  function updateMasterplanImage(files: FileList | null) {
+    const file = files?.[0];
+
+    if (!lead || !file) {
+      return;
+    }
+
+    updateLeadState({
+      masterplan: {
+        ...lead.masterplan,
+        image: createLocalImageAsset(file, "Final plan sketch or AI-enhanced masterplan."),
+        status: lead.masterplan?.status ?? "Sketch Required",
+      },
+    });
+  }
+
+  function updateMasterplanField(field: "notes" | "status", value: string) {
+    if (!lead) {
+      return;
+    }
+
+    updateLeadState({
+      masterplan: {
+        ...lead.masterplan,
+        [field]: value,
+      },
+    });
+  }
+
+  function updateHeroRenderImage(files: FileList | null) {
+    const file = files?.[0];
+
+    if (!lead || !file) {
+      return;
+    }
+
+    updateLeadState({
+      heroRender: {
+        ...lead.heroRender,
+        image: createLocalImageAsset(file, "Hero concept render."),
+        renderStatus: lead.heroRender?.renderStatus ?? "Generated Manually",
+      },
+    });
+  }
+
+  function updateHeroRenderField(field: "notes" | "renderStatus", value: string) {
+    if (!lead) {
+      return;
+    }
+
+    updateLeadState({
+      heroRender: {
+        ...lead.heroRender,
+        [field]: value,
+      },
+    });
+  }
+
+  function updateLeadState(updates: Partial<GardenBriefLead>) {
+    if (!lead) {
+      return;
+    }
+
+    const updatedLead = {
+      ...lead,
+      ...updates,
     };
 
     setLead(updatedLead);
@@ -148,6 +442,14 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
 
   async function copyManualProductionBrief() {
     await navigator.clipboard.writeText(manualProductionBrief);
+  }
+
+  async function copyDesignConceptPrompt() {
+    await navigator.clipboard.writeText(designConceptPrompt);
+  }
+
+  async function copyHeroRenderPrompt() {
+    await navigator.clipboard.writeText(heroRenderPrompt);
   }
 
   async function downloadPhoto(photo: NonNullable<GardenBriefLead["photos"]>[number]) {
@@ -193,17 +495,672 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
         <p>{lead.status}</p>
       </div>
 
+      <div className="memory-layout">
+        <article className="memory-panel">
+          <p className="eyebrow">Design Studio</p>
+          <h3>Lead summary</h3>
+          <dl>
+            <div>
+              <dt>Address / postcode</dt>
+              <dd>{lead.address || "No address provided"}</dd>
+            </div>
+            <div>
+              <dt>Google Maps review</dt>
+              <dd>
+                {lead.address ? (
+                  <a
+                    className="inline-link"
+                    href={buildGoogleMapsUrl(lead.address)}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Open in Google Maps
+                  </a>
+                ) : (
+                  "Add an address/postcode first"
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Budget band</dt>
+              <dd>{lead.budgetBand || "Not selected"}</dd>
+            </div>
+            <div>
+              <dt>Selected style</dt>
+              <dd>{lead.preferredStyle || "Style to be refined"}</dd>
+            </div>
+            <div>
+              <dt>Must-haves</dt>
+              <dd>{formatList(lead.mustHaves)}</dd>
+            </div>
+            <div>
+              <dt>Nice-to-haves</dt>
+              <dd>{formatList(lead.niceToHaves)}</dd>
+            </div>
+            <div>
+              <dt>Customer notes</dt>
+              <dd>{lead.notes || "No notes provided"}</dd>
+            </div>
+          </dl>
+        </article>
+
+        <article className="memory-panel">
+          <p className="eyebrow">Garden layout preparation</p>
+          <h3>Jack’s layout review</h3>
+          <p>
+            Use the customer photos and Google Maps/satellite view to prepare
+            your own working plan sketch. These fields are admin-only.
+          </p>
+          <div className="field-grid">
+            <label>
+              Garden shape
+              <select
+                value={lead.adminLayoutPreparation?.gardenShape ?? lead.gardenShape ?? ""}
+                onChange={(event) => updateAdminLayoutField("gardenShape", event.target.value)}
+              >
+                <option value="">Select a shape</option>
+                {adminGardenShapeOptions.map((option) => (
+                  <option key={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              House position
+              <select
+                value={lead.adminLayoutPreparation?.housePosition ?? lead.housePosition ?? ""}
+                onChange={(event) => updateAdminLayoutField("housePosition", event.target.value)}
+              >
+                <option value="">Select a position</option>
+                {adminHousePositionOptions.map((option) => (
+                  <option key={option}>{option}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Approx. garden length
+              <input
+                value={lead.adminLayoutPreparation?.approximateLength ?? ""}
+                onChange={(event) => updateAdminLayoutField("approximateLength", event.target.value)}
+                placeholder="e.g. 10"
+              />
+            </label>
+            <label>
+              Approx. garden width
+              <input
+                value={lead.adminLayoutPreparation?.approximateWidth ?? ""}
+                onChange={(event) => updateAdminLayoutField("approximateWidth", event.target.value)}
+                placeholder="e.g. 6"
+              />
+            </label>
+            <label>
+              Unit
+              <select
+                value={lead.adminLayoutPreparation?.unit ?? ""}
+                onChange={(event) => updateAdminLayoutField("unit", event.target.value)}
+              >
+                <option value="">Select unit</option>
+                <option>metres</option>
+                <option>feet</option>
+              </select>
+            </label>
+          </div>
+          <label>
+            Google Maps review notes
+            <textarea
+              rows={3}
+              value={lead.adminLayoutPreparation?.googleMapsReviewNotes ?? ""}
+              onChange={(event) =>
+                updateAdminLayoutField("googleMapsReviewNotes", event.target.value)
+              }
+              placeholder="Satellite review, orientation, neighbouring context or access observations."
+            />
+          </label>
+          <label>
+            Existing layout notes
+            <textarea
+              rows={3}
+              value={lead.adminLayoutPreparation?.existingLayoutNotes ?? lead.layoutNotes ?? ""}
+              onChange={(event) =>
+                updateAdminLayoutField("existingLayoutNotes", event.target.value)
+              }
+              placeholder="Existing patio, lawn, shed, boundaries, doors, level changes."
+            />
+          </label>
+          <label>
+            Constraints / access notes
+            <textarea
+              rows={3}
+              value={lead.adminLayoutPreparation?.constraintsAccessNotes ?? ""}
+              onChange={(event) =>
+                updateAdminLayoutField("constraintsAccessNotes", event.target.value)
+              }
+              placeholder="Side access, drainage, tight turns, items not to block."
+            />
+          </label>
+          <label>
+            Jack’s sketch notes
+            <textarea
+              rows={3}
+              value={lead.adminLayoutPreparation?.sketchNotes ?? ""}
+              onChange={(event) => updateAdminLayoutField("sketchNotes", event.target.value)}
+              placeholder="Quick plan sketch notes before drawing."
+            />
+          </label>
+          <label>
+            Initial plan direction notes
+            <textarea
+              rows={3}
+              value={lead.adminLayoutPreparation?.initialPlanDirectionNotes ?? ""}
+              onChange={(event) =>
+                updateAdminLayoutField("initialPlanDirectionNotes", event.target.value)
+              }
+              placeholder="First layout direction for consultation."
+            />
+          </label>
+        </article>
+      </div>
+
+      <div className="memory-layout design-studio-grid">
+        <article className="memory-panel plan-sketch-panel">
+          <p className="eyebrow">Existing garden plan</p>
+          <h3>Top-down source of truth</h3>
+          <p>
+            Upload the cleaned-up top-down garden plan. This becomes the source
+            of truth for layout concepts.
+          </p>
+          {lead.existingGardenPlan?.image?.previewUrl || lead.existingGardenPlan?.image?.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={
+                lead.existingGardenPlan.image.previewUrl ??
+                lead.existingGardenPlan.image.imageUrl
+              }
+              alt="Existing top-down garden plan"
+            />
+          ) : (
+            <div className="proposal-image-placeholder">
+              Upload cleaned-up existing garden plan from satellite/manual prep.
+            </div>
+          )}
+          <label>
+            Existing plan source
+            <select
+              value={lead.existingGardenPlan?.source ?? ""}
+              onChange={(event) => updateExistingPlanField("source", event.target.value)}
+            >
+              <option value="">Select source</option>
+              {existingPlanSources.map((source) => (
+                <option key={source}>{source}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Existing plan notes
+            <textarea
+              rows={4}
+              value={lead.existingGardenPlan?.notes ?? ""}
+              onChange={(event) => updateExistingPlanField("notes", event.target.value)}
+              placeholder="How the plan was prepared, what was cleaned up, what is uncertain."
+            />
+          </label>
+          <label>
+            Upload existing garden plan
+            <input
+              accept="image/*"
+              type="file"
+              onChange={(event) => {
+                updateExistingPlanImage(event.currentTarget.files);
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
+          <p className="helper-text">
+            Created: {formatDateOrPending(lead.existingGardenPlan?.createdAt)} · Updated:{" "}
+            {formatDateOrPending(lead.existingGardenPlan?.updatedAt)}
+          </p>
+        </article>
+
+        <article className="memory-panel">
+          <p className="eyebrow">Scale information</p>
+          <h3>Approximate dimensions</h3>
+          <p>
+            Use Google Maps measure tool or your own marked scale to record
+            approximate dimensions. These dimensions guide AI concept layouts and
+            budget realism.
+          </p>
+          <div className="field-grid">
+            <label>
+              Garden width
+              <input
+                value={lead.scaleInformation?.gardenWidth ?? ""}
+                onChange={(event) => updateScaleField("gardenWidth", event.target.value)}
+                placeholder="e.g. 6"
+              />
+            </label>
+            <label>
+              Garden length
+              <input
+                value={lead.scaleInformation?.gardenLength ?? ""}
+                onChange={(event) => updateScaleField("gardenLength", event.target.value)}
+                placeholder="e.g. 10"
+              />
+            </label>
+            <label>
+              Unit
+              <select
+                value={lead.scaleInformation?.unit ?? ""}
+                onChange={(event) => updateScaleField("unit", event.target.value)}
+              >
+                <option value="">Select unit</option>
+                <option>metres</option>
+                <option>feet</option>
+              </select>
+            </label>
+            <label>
+              Calculated area
+              <input
+                readOnly
+                value={
+                  lead.scaleInformation?.calculatedArea
+                    ? `${lead.scaleInformation.calculatedArea} sq ${lead.scaleInformation.unit || ""}`
+                    : "Not calculated"
+                }
+              />
+            </label>
+          </div>
+          <label>
+            Scale notes
+            <textarea
+              rows={4}
+              value={lead.scaleInformation?.scaleNotes ?? ""}
+              onChange={(event) => updateScaleField("scaleNotes", event.target.value)}
+              placeholder="Measurement method, approximate scale, uncertainty or marked reference."
+            />
+          </label>
+        </article>
+      </div>
+
+      <article className="memory-panel style-guide-panel">
+        <p className="eyebrow">Selected style guide</p>
+        <h3>{selectedStyleGuide.name}</h3>
+        <p>{selectedStyleGuide.summary}</p>
+        <div className="style-guide-grid">
+          <GuideList title="Should contain" items={selectedStyleGuide.shouldContain} />
+          <GuideList title="Key materials" items={selectedStyleGuide.keyMaterials} />
+          <GuideList title="Planting direction" items={selectedStyleGuide.plantingDirection} />
+          <GuideList title="Suitable features" items={selectedStyleGuide.suitableFeatures} />
+          <GuideList
+            title="Budget-sensitive alternatives"
+            items={selectedStyleGuide.budgetSensitiveAlternatives}
+          />
+          <GuideList title="Avoid" items={selectedStyleGuide.avoid} />
+          <GuideList title="Sketch guidance" items={selectedStyleGuide.sketchGuidance} />
+        </div>
+        <div className="inspiration-slot-grid">
+          {selectedStyleGuide.inspirationSlots.map((slot) => (
+            <div className="inspiration-slot" key={slot}>
+              Placeholder inspiration image: {slot}
+            </div>
+          ))}
+        </div>
+      </article>
+
+      <article className="memory-panel">
+        <p className="eyebrow">Feature placement notes</p>
+        <h3>Guide the plan sketch</h3>
+        <p>
+          These notes are for Jack’s plan sketch and any later AI-improved plan
+          view. They do not ask the customer to prepare a sketch.
+        </p>
+        <div className="feature-placement-grid">
+          {featurePlacementNotes.map((row) => (
+            <article className="feature-placement-card" key={`${row.priority}-${row.feature}`}>
+              <div>
+                <h4>{row.feature}</h4>
+                <span>{row.priority}</span>
+                <span>{row.budgetStatus}</span>
+              </div>
+              <label>
+                Placement
+                <select
+                  value={row.placement}
+                  onChange={(event) =>
+                    updateFeaturePlacementNote(row.feature, { placement: event.target.value })
+                  }
+                >
+                  {adminPlacementOptions.map((option) => (
+                    <option key={option}>{option}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Placement note
+                <textarea
+                  rows={2}
+                  value={row.note}
+                  onChange={(event) =>
+                    updateFeaturePlacementNote(row.feature, { note: event.target.value })
+                  }
+                  placeholder="Sketch note or call discussion point."
+                />
+              </label>
+            </article>
+          ))}
+        </div>
+      </article>
+
+      <article className="memory-panel">
+        <div className="photo-download-header">
+          <div>
+            <p className="eyebrow">AI layout concepts</p>
+            <h3>Concept A / B / C</h3>
+            <p>
+              Copy the prompt, paste it into ChatGPT/Gemini with the existing
+              garden plan, then record the three layout options here. No AI API
+              is connected yet.
+            </p>
+          </div>
+          <button className="button button-secondary" type="button" onClick={copyDesignConceptPrompt}>
+            Copy AI Concept Prompt
+          </button>
+        </div>
+        <div className="concept-card-grid">
+          {getLayoutConcepts(lead).map((concept) => (
+            <article className="layout-concept-card" key={concept.id}>
+              <div className="concept-card-header">
+                <p className="eyebrow">Concept {concept.id}</p>
+                <select
+                  value={concept.status}
+                  onChange={(event) =>
+                    updateConcept(concept.id, {
+                      status: event.target.value as LayoutConceptStatus,
+                    })
+                  }
+                >
+                  {layoutConceptStatuses.map((status) => (
+                    <option key={status}>{status}</option>
+                  ))}
+                </select>
+              </div>
+              <label>
+                Concept name
+                <input
+                  value={concept.conceptName}
+                  onChange={(event) => updateConcept(concept.id, { conceptName: event.target.value })}
+                />
+              </label>
+              <label>
+                Design intent
+                <textarea
+                  rows={2}
+                  value={concept.designIntent}
+                  onChange={(event) => updateConcept(concept.id, { designIntent: event.target.value })}
+                />
+              </label>
+              <label>
+                Layout summary
+                <textarea
+                  rows={3}
+                  value={concept.layoutSummary}
+                  onChange={(event) => updateConcept(concept.id, { layoutSummary: event.target.value })}
+                />
+              </label>
+              <label>
+                Key features
+                <textarea
+                  rows={2}
+                  value={concept.keyFeatures}
+                  onChange={(event) => updateConcept(concept.id, { keyFeatures: event.target.value })}
+                />
+              </label>
+              <label>
+                Feature placements
+                <textarea
+                  rows={3}
+                  value={concept.featurePlacements}
+                  onChange={(event) =>
+                    updateConcept(concept.id, { featurePlacements: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                Why it fits budget
+                <textarea
+                  rows={2}
+                  value={concept.whyItFitsBudget}
+                  onChange={(event) =>
+                    updateConcept(concept.id, { whyItFitsBudget: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                Why it fits style
+                <textarea
+                  rows={2}
+                  value={concept.whyItFitsStyle}
+                  onChange={(event) =>
+                    updateConcept(concept.id, { whyItFitsStyle: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                Risks / watchouts
+                <textarea
+                  rows={2}
+                  value={concept.risksOrWatchouts}
+                  onChange={(event) =>
+                    updateConcept(concept.id, { risksOrWatchouts: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                Jack notes
+                <textarea
+                  rows={2}
+                  value={concept.jackNotes}
+                  onChange={(event) => updateConcept(concept.id, { jackNotes: event.target.value })}
+                />
+              </label>
+            </article>
+          ))}
+        </div>
+        <pre className="prompt-preview prompt-preview-compact">{designConceptPrompt}</pre>
+      </article>
+
+      <article className="memory-panel">
+        <p className="eyebrow">Jack review</p>
+        <h3>Final layout direction</h3>
+        <div className="field-grid">
+          <label>
+            Selected concept source
+            <select
+              value={lead.finalLayoutDirection?.selectedConceptSource ?? ""}
+              onChange={(event) =>
+                updateFinalLayoutField("selectedConceptSource", event.target.value)
+              }
+            >
+              <option value="">Select source</option>
+              {finalLayoutSources.map((source) => (
+                <option key={source}>{source}</option>
+              ))}
+            </select>
+          </label>
+          <label className="review-check">
+            <input
+              checked={Boolean(lead.finalLayoutDirection?.readyForMasterplan)}
+              type="checkbox"
+              onChange={(event) =>
+                updateFinalLayoutField("readyForMasterplan", event.target.checked)
+              }
+            />
+            Ready for masterplan
+          </label>
+        </div>
+        <label>
+          Final layout summary
+          <textarea
+            rows={3}
+            value={lead.finalLayoutDirection?.finalLayoutSummary ?? ""}
+            onChange={(event) =>
+              updateFinalLayoutField("finalLayoutSummary", event.target.value)
+            }
+          />
+        </label>
+        <label>
+          Final feature placements
+          <textarea
+            rows={3}
+            value={lead.finalLayoutDirection?.finalFeaturePlacements ?? ""}
+            onChange={(event) =>
+              updateFinalLayoutField("finalFeaturePlacements", event.target.value)
+            }
+          />
+        </label>
+        <label>
+          Final budget notes
+          <textarea
+            rows={2}
+            value={lead.finalLayoutDirection?.finalBudgetNotes ?? ""}
+            onChange={(event) => updateFinalLayoutField("finalBudgetNotes", event.target.value)}
+          />
+        </label>
+        <label>
+          Final style notes
+          <textarea
+            rows={2}
+            value={lead.finalLayoutDirection?.finalStyleNotes ?? ""}
+            onChange={(event) => updateFinalLayoutField("finalStyleNotes", event.target.value)}
+          />
+        </label>
+        <label>
+          Final risks
+          <textarea
+            rows={2}
+            value={lead.finalLayoutDirection?.finalRisks ?? ""}
+            onChange={(event) => updateFinalLayoutField("finalRisks", event.target.value)}
+          />
+        </label>
+      </article>
+
+      <article className="memory-panel plan-sketch-panel">
+        <div>
+          <p className="eyebrow">Final masterplan</p>
+          <h3>Masterplan placeholder</h3>
+          <p>
+            Upload the final plan sketch or AI-enhanced masterplan once the
+            layout direction has been chosen.
+          </p>
+        </div>
+        {lead.masterplan?.image?.previewUrl || lead.masterplan?.image?.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={lead.masterplan.image.previewUrl ?? lead.masterplan.image.imageUrl}
+            alt="Final masterplan"
+          />
+        ) : (
+          <div className="proposal-image-placeholder">
+            Upload final plan sketch or AI-enhanced masterplan.
+          </div>
+        )}
+        <label>
+          Masterplan status
+          <select
+            value={lead.masterplan?.status ?? "Not Started"}
+            onChange={(event) => updateMasterplanField("status", event.target.value)}
+          >
+            {masterplanStatuses.map((status) => (
+              <option key={status}>{status}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Masterplan notes
+          <textarea
+            rows={3}
+            value={lead.masterplan?.notes ?? ""}
+            onChange={(event) => updateMasterplanField("notes", event.target.value)}
+          />
+        </label>
+        <label>
+          Upload masterplan image
+          <input
+            accept="image/*"
+            type="file"
+            onChange={(event) => {
+              updateMasterplanImage(event.currentTarget.files);
+              event.currentTarget.value = "";
+            }}
+          />
+        </label>
+      </article>
+
+      <article className="memory-panel plan-sketch-panel">
+        <div className="photo-download-header">
+          <div>
+            <p className="eyebrow">Hero concept render</p>
+            <h3>One strong hero image</h3>
+            <p>
+              Prepare one hero render from the final masterplan, customer photos,
+              selected style, budget and final feature placements.
+            </p>
+          </div>
+          <button className="button button-secondary" type="button" onClick={copyHeroRenderPrompt}>
+            Copy Hero Render Prompt
+          </button>
+        </div>
+        {lead.heroRender?.image?.previewUrl || lead.heroRender?.image?.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={lead.heroRender.image.previewUrl ?? lead.heroRender.image.imageUrl}
+            alt="Hero concept render"
+          />
+        ) : (
+          <div className="proposal-image-placeholder">
+            Upload manually generated hero concept render.
+          </div>
+        )}
+        <label>
+          Render status
+          <select
+            value={lead.heroRender?.renderStatus ?? "Not Started"}
+            onChange={(event) => updateHeroRenderField("renderStatus", event.target.value)}
+          >
+            {heroRenderStatuses.map((status) => (
+              <option key={status}>{status}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Hero render notes
+          <textarea
+            rows={3}
+            value={lead.heroRender?.notes ?? ""}
+            onChange={(event) => updateHeroRenderField("notes", event.target.value)}
+          />
+        </label>
+        <label>
+          Upload hero render
+          <input
+            accept="image/*"
+            type="file"
+            onChange={(event) => {
+              updateHeroRenderImage(event.currentTarget.files);
+              event.currentTarget.value = "";
+            }}
+          />
+        </label>
+        <pre className="prompt-preview prompt-preview-compact">{heroRenderPrompt}</pre>
+      </article>
+
       <article className="memory-panel gemini-prep-panel">
         <div className="photo-download-header">
           <div>
-            <p className="eyebrow">Gemini prep workflow</p>
-            <h3>Map the whole garden before generating views</h3>
+            <p className="eyebrow">Optional prompt preparation</p>
+            <h3>Reference pack for manual AI work</h3>
             <p>
-              Upload every labelled client photo into one Gemini conversation first,
-              then paste this master mapping prompt. Use the per-view prompt below
-              only after Gemini has understood the garden as one connected space.
-              Once one concept is approved, lock it as the visual anchor in the
-              proposal pack before generating the remaining views.
+              Use this only as a support prompt for manual Firefly/Gemini work.
+              Jack’s layout review, style guide, feature placement notes and
+              plan sketch remain the source of truth.
             </p>
           </div>
           <div className="gemini-prep-actions">
@@ -219,9 +1176,9 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
         </div>
         <ol className="gemini-workflow-list">
           <li>Download the labelled garden photos from this lead.</li>
-          <li>Upload all views to Gemini in the same conversation.</li>
-          <li>Paste the mapping prompt so Gemini identifies boundaries, house position and camera angles.</li>
-          <li>Approve one strong concept as the visual anchor, then generate each remaining view below.</li>
+          <li>Review address/postcode in Google Maps and prepare Jack’s sketch notes.</li>
+          <li>Use the selected style guide and feature placement notes to guide edits.</li>
+          <li>Create one strong hero concept first; treat other views as optional support material.</li>
         </ol>
         <pre className="prompt-preview prompt-preview-compact">{gardenMappingPrompt}</pre>
       </article>
@@ -287,10 +1244,10 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
 
       <div className="memory-layout">
         <article className="memory-panel">
-          <h3>Design Memory</h3>
+          <h3>Consultation data</h3>
           <p>
-            Version-specific placement maps keep each visual concept consistent
-            across multiple uploaded garden views.
+            Internal budget, style and proposal-version data used to prepare the
+            consultation pack.
           </p>
           <dl>
             <div>
@@ -350,7 +1307,7 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
         </article>
 
         <article className="memory-panel">
-          <h3>Prompt Preview</h3>
+          <h3>Optional prompt preview</h3>
           <div className="field-grid">
             <label>
               Design version
@@ -552,14 +1509,139 @@ function getExcludedForVersion(lead: GardenBriefLead, versionFeatures: string[])
   return requestedFeatures.filter((feature) => !versionFeatures.includes(feature));
 }
 
+function GuideList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div>
+      <h4>{title}</h4>
+      <ul className="feature-list">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function buildGoogleMapsUrl(address: string) {
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
+}
+
+function buildFeaturePlacementRows(lead: GardenBriefLead): FeaturePlacementNote[] {
+  const existing = lead.featurePlacementNotes ?? [];
+  const mustHaves = lead.mustHaves.map((feature) =>
+    buildFeaturePlacementRow({
+      existing,
+      feature,
+      lead,
+      priority: "Must-have",
+    }),
+  );
+  const niceToHaves = lead.niceToHaves.map((feature) =>
+    buildFeaturePlacementRow({
+      existing,
+      feature,
+      lead,
+      priority: "Nice-to-have",
+    }),
+  );
+
+  return uniqueFeatureRows([...mustHaves, ...niceToHaves]);
+}
+
+function getLayoutConcepts(lead: GardenBriefLead): LayoutConcept[] {
+  const saved = lead.layoutConcepts ?? [];
+
+  return defaultLayoutConcepts.map((concept) => ({
+    ...concept,
+    ...(saved.find((savedConcept) => savedConcept.id === concept.id) ?? {}),
+  }));
+}
+
+function createLocalImageAsset(file: File, imageNotes: string): ProposalImageAsset {
+  return {
+    fileName: file.name,
+    previewUrl: URL.createObjectURL(file),
+    imageNotes,
+    imageStatus: "Generated Manually",
+    approved: false,
+  };
+}
+
+function formatDateOrPending(value?: string) {
+  if (!value) {
+    return "Not recorded";
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function buildFeaturePlacementRow({
+  existing,
+  feature,
+  lead,
+  priority,
+}: {
+  existing: FeaturePlacementNote[];
+  feature: string;
+  lead: GardenBriefLead;
+  priority: FeaturePlacementNote["priority"];
+}): FeaturePlacementNote {
+  const saved = existing.find((row) => row.feature === feature);
+
+  return {
+    feature,
+    priority,
+    budgetStatus: getFeatureBudgetStatus(lead, feature, priority),
+    placement: saved?.placement || "Unsure / discuss on call",
+    note: saved?.note || "",
+  };
+}
+
+function getFeatureBudgetStatus(
+  lead: GardenBriefLead,
+  feature: string,
+  priority: FeaturePlacementNote["priority"],
+): FeaturePlacementNote["budgetStatus"] {
+  if (
+    lead.excludedMustHaves?.includes(feature) ||
+    lead.excludedNiceToHaves?.includes(feature)
+  ) {
+    return "Better for enhanced/dream";
+  }
+
+  if (lead.cautionMustHaves?.includes(feature) || priority === "Nice-to-have") {
+    return "Caution";
+  }
+
+  return "Suitable";
+}
+
+function uniqueFeatureRows(rows: FeaturePlacementNote[]) {
+  const seen = new Set<string>();
+
+  return rows.filter((row) => {
+    if (seen.has(row.feature)) {
+      return false;
+    }
+
+    seen.add(row.feature);
+    return true;
+  });
+}
+
 function buildManualProductionBrief({
   designVersion,
+  featurePlacementNotes,
   lead,
   memory,
   photo,
   visualAnchor,
 }: {
   designVersion: DesignVersion;
+  featurePlacementNotes: FeaturePlacementNote[];
   lead: GardenBriefLead;
   memory: DesignMemory;
   photo: NonNullable<GardenBriefLead["photos"]>[number] | null;
@@ -603,6 +1685,14 @@ Design direction:
 - Planting maintenance: ${memory.plantingMaintenance}
 - Planting colour direction: ${memory.plantingColourScheme}
 
+Jack layout preparation:
+- Garden shape: ${lead.adminLayoutPreparation?.gardenShape || lead.gardenShape || "Not reviewed yet"}
+- Approx. size: ${lead.adminLayoutPreparation?.approximateLength || "?"} x ${lead.adminLayoutPreparation?.approximateWidth || "?"} ${lead.adminLayoutPreparation?.unit || ""}
+- House position: ${lead.adminLayoutPreparation?.housePosition || lead.housePosition || "Not reviewed yet"}
+- Google Maps notes: ${lead.adminLayoutPreparation?.googleMapsReviewNotes || "Not reviewed yet"}
+- Sketch notes: ${lead.adminLayoutPreparation?.sketchNotes || "No sketch notes yet"}
+- Initial plan direction: ${lead.adminLayoutPreparation?.initialPlanDirectionNotes || "No plan direction yet"}
+
 Manually add or enhance only these features:
 ${bulletList(safeFeatures)}
 
@@ -618,6 +1708,16 @@ Placement notes:
 ${Object.entries(memory.lockedFeaturePlacements)
   .map(([feature, placement]) => `- ${feature}: ${placement}`)
   .join("\n") || "- No locked placements set."}
+
+Jack feature placement notes:
+${featurePlacementNotes
+  .map(
+    (note) =>
+      `- ${note.feature} (${note.priority}, ${note.budgetStatus}): ${note.placement}${
+        note.note ? ` — ${note.note}` : ""
+      }`,
+  )
+  .join("\n") || "- No feature placement notes yet."}
 
 Admin guardrails:
 - ${guardrails}

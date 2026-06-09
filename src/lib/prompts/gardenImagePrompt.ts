@@ -4,7 +4,12 @@ import {
   validateConceptAgainstBudget,
   type BudgetRealityStatus,
 } from "@/lib/costRules";
-import type { GardenPhotoLabel, VisualAnchorMemory } from "@/data/types";
+import type {
+  AdminGardenLayoutPreparation,
+  FeaturePlacementNote,
+  GardenPhotoLabel,
+  VisualAnchorMemory,
+} from "@/data/types";
 
 type GardenImagePromptInput = {
   designVersion: DesignVersion;
@@ -19,6 +24,9 @@ type GardenImagePromptInput = {
   currentPhoto?: GardenPhotoLabel | null;
   visualAnchor?: VisualAnchorMemory | null;
   aiViewGuardrails?: string;
+  adminLayoutPreparation?: AdminGardenLayoutPreparation;
+  featurePlacementNotes?: FeaturePlacementNote[];
+  planSketchAvailable?: boolean;
 };
 
 export function buildGardenImagePrompt({
@@ -34,6 +42,9 @@ export function buildGardenImagePrompt({
   currentPhoto,
   visualAnchor,
   aiViewGuardrails,
+  adminLayoutPreparation,
+  featurePlacementNotes,
+  planSketchAvailable,
 }: GardenImagePromptInput) {
   const labelledSourceFileName = currentPhoto
     ? buildLabelledPhotoFileName(currentPhoto)
@@ -66,6 +77,15 @@ export function buildGardenImagePrompt({
 
   return `Create a realistic, buildable Anthēon Outdoor garden concept for the ${designVersion} proposal.
 
+CONSULTATION PREPARATION SOURCE OF TRUTH:
+- Use Jack's plan sketch, layout review notes and feature placement notes as the source of truth.
+- Do not treat this as an automatic multi-view garden model.
+- Create one strong hero concept image only.
+- Do not invent duplicate feature locations.
+- Plan sketch available: ${planSketchAvailable ? "Yes" : "No"}.
+- Jack's layout notes: ${formatAdminLayoutNotes(adminLayoutPreparation)}
+- Feature placement notes: ${formatFeaturePlacementNotes(featurePlacementNotes)}
+
 SOURCE IMAGE LOCK - CRITICAL:
 - Use the labelled admin export "${labelledSourceFileName}" as the visual base and file of truth for this generation.
 - The customer's original upload filename is metadata only: ${currentPhoto?.fileName || "Not available"}.
@@ -82,7 +102,7 @@ SOURCE IMAGE LOCK - CRITICAL:
 OPEN AREA AND ACCESS LOCK:
 - Identify which edges in the source photo are real boundaries and which are open sides, access routes, house returns, patio edges, paths, doors, shed fronts or circulation areas.
 - Do not turn an open side or circulation route into a closed boundary.
-- Do not add new fencing, raised planters, screening or boundary planting to an open side unless the design memory explicitly locks that feature there.
+- Do not add new fencing, raised planters, screening or boundary planting to an open side unless Jack's feature placement notes explicitly place that feature there.
 - Preserve visible side access, door access, shed access, patio circulation and open routes beside the house.
 - In a view looking back toward the house, do not assume the left or right edge of the image is a boundary. Only treat it as a boundary if the source photo clearly shows a fence, wall or boundary line.
 - If an area reads as open space beside the house, keep it open and functional.
@@ -159,6 +179,42 @@ function list(items: string[]) {
   return items.length ? items.join(", ") : "None specified";
 }
 
+function formatAdminLayoutNotes(prep?: AdminGardenLayoutPreparation) {
+  if (!prep) {
+    return "No Jack layout preparation notes provided yet.";
+  }
+
+  return [
+    prep.gardenShape ? `Garden shape: ${prep.gardenShape}` : "",
+    prep.approximateLength || prep.approximateWidth
+      ? `Approximate size: ${prep.approximateLength || "?"} x ${prep.approximateWidth || "?"} ${prep.unit || ""}`
+      : "",
+    prep.housePosition ? `House position: ${prep.housePosition}` : "",
+    prep.googleMapsReviewNotes ? `Google Maps review: ${prep.googleMapsReviewNotes}` : "",
+    prep.existingLayoutNotes ? `Existing layout: ${prep.existingLayoutNotes}` : "",
+    prep.constraintsAccessNotes ? `Constraints/access: ${prep.constraintsAccessNotes}` : "",
+    prep.sketchNotes ? `Sketch notes: ${prep.sketchNotes}` : "",
+    prep.initialPlanDirectionNotes ? `Initial plan direction: ${prep.initialPlanDirectionNotes}` : "",
+  ]
+    .filter(Boolean)
+    .join(" | ") || "No Jack layout preparation notes provided yet.";
+}
+
+function formatFeaturePlacementNotes(notes?: FeaturePlacementNote[]) {
+  if (!notes?.length) {
+    return "No feature placement notes provided yet.";
+  }
+
+  return notes
+    .map(
+      (note) =>
+        `${note.feature} (${note.priority}, ${note.budgetStatus}) -> ${note.placement}${
+          note.note ? `; note: ${note.note}` : ""
+        }`,
+    )
+    .join(" | ");
+}
+
 function getBudgetSafeGenerationFeatures({
   approvedFeatures,
   blockedFeatures,
@@ -207,7 +263,7 @@ function buildVisualAnchorPromptSection(visualAnchor?: VisualAnchorMemory | null
   if (!visualAnchor) {
     return `APPROVED VISUAL ANCHOR:
 - No approved anchor image has been locked yet for this proposal version.
-- Follow the design memory and source image lock carefully.`;
+- Follow Jack's layout preparation notes and the source image lock carefully.`;
   }
 
   return `APPROVED VISUAL ANCHOR - DESIGN PLACEMENT LOCK:

@@ -213,6 +213,38 @@ export function AdminProposalPack({ leadId }: { leadId: string }) {
               <dd>{proposalPack.budgetSummary}</dd>
             </div>
             <div>
+              <dt>Layout review</dt>
+              <dd>{proposalPack.layoutReviewSummary}</dd>
+            </div>
+            <div>
+              <dt>Feature placement notes</dt>
+              <dd>{proposalPack.featurePlacementSummary}</dd>
+            </div>
+            <div>
+              <dt>Existing plan</dt>
+              <dd>{proposalPack.existingPlanSummary}</dd>
+            </div>
+            <div>
+              <dt>Scale</dt>
+              <dd>{proposalPack.scaleSummary}</dd>
+            </div>
+            <div>
+              <dt>Layout concepts</dt>
+              <dd>{proposalPack.layoutConceptSummary}</dd>
+            </div>
+            <div>
+              <dt>Final layout</dt>
+              <dd>{proposalPack.finalLayoutSummary}</dd>
+            </div>
+            <div>
+              <dt>Masterplan</dt>
+              <dd>{proposalPack.masterplanSummary}</dd>
+            </div>
+            <div>
+              <dt>Hero render</dt>
+              <dd>{proposalPack.heroRenderSummary}</dd>
+            </div>
+            <div>
               <dt>Proposal status</dt>
               <dd>{lead.proposalStatus ?? "Proposal Drafted"}</dd>
             </div>
