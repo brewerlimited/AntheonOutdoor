@@ -1565,6 +1565,10 @@ textarea {
   padding: 24px;
 }
 
+.gemini-prep-panel {
+  margin-bottom: 18px;
+}
+
 .memory-panel + .memory-panel,
 .memory-layout + .memory-panel {
   margin-top: 18px;
@@ -1609,6 +1613,102 @@ textarea {
   overflow: auto;
   padding: 18px;
   white-space: pre-wrap;
+}
+
+.prompt-preview-compact {
+  max-height: 320px;
+}
+
+.photo-download-header {
+  align-items: start;
+  display: flex;
+  gap: 18px;
+  justify-content: space-between;
+}
+
+.gemini-prep-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.gemini-workflow-list {
+  counter-reset: gemini-step;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  list-style: none;
+  margin: 22px 0 0;
+  padding: 0;
+}
+
+.gemini-workflow-list li {
+  background: rgba(244, 239, 230, 0.62);
+  border: 1px solid rgba(155, 122, 79, 0.16);
+  border-radius: 14px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.45;
+  padding: 14px;
+}
+
+.gemini-workflow-list li::before {
+  color: var(--bronze);
+  content: counter(gemini-step, decimal-leading-zero);
+  counter-increment: gemini-step;
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.photo-download-header .button {
+  flex: 0 0 auto;
+}
+
+.admin-photo-grid {
+  display: grid;
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.admin-photo-card {
+  background: rgba(244, 239, 230, 0.5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 18px;
+  grid-template-columns: 180px minmax(0, 1fr);
+  padding: 16px;
+}
+
+.admin-photo-card img,
+.admin-photo-card .proposal-image-placeholder {
+  aspect-ratio: 1.25;
+  border-radius: var(--radius);
+  min-height: 0;
+  object-fit: cover;
+  width: 100%;
+}
+
+.admin-photo-card h4 {
+  color: var(--charcoal);
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  font-weight: 400;
+}
+
+.admin-photo-card dl {
+  gap: 10px;
+  margin: 14px 0 18px;
+}
+
+.admin-photo-card dd {
+  overflow-wrap: anywhere;
 }
 
 .proposal-actions {
@@ -2381,6 +2481,22 @@ button.investment-card {
   .table-actions {
     flex-direction: row;
     flex-wrap: wrap;
+  }
+
+  .gemini-workflow-list {
+    grid-template-columns: 1fr;
+  }
+
+  .gemini-prep-actions {
+    justify-content: flex-start;
+  }
+
+  .photo-download-header {
+    flex-direction: column;
+  }
+
+  .admin-photo-card {
+    grid-template-columns: 1fr;
   }
 
   .hero-visual {

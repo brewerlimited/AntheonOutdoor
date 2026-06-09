@@ -238,7 +238,7 @@ async function uploadGardenPhotos(lead: GardenBriefLead, photoUploads: PhotoUplo
         return photo;
       }
 
-      const storagePath = `${lead.id}/${photo.id}-${safeFileName(upload.file.name)}`;
+      const storagePath = `${lead.id}/${buildLabelledPhotoFileName(photo, upload.file.name)}`;
       const { error } = await supabase.storage
         .from(GARDEN_PHOTOS_BUCKET)
         .upload(storagePath, upload.file, {
@@ -477,6 +477,23 @@ function getPublicStorageUrl(bucket: string, path: string) {
 
 function safeFileName(fileName: string) {
   return fileName.toLowerCase().replace(/[^a-z0-9.]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function buildLabelledPhotoFileName(
+  photo: { id: string; label?: string; fileName?: string },
+  fallbackFileName: string,
+) {
+  const sourceName = photo.fileName || fallbackFileName;
+  const extension = getFileExtension(sourceName);
+  const label = photo.label || "garden-photo";
+
+  return `${safeFileName(label)}-${photo.id}${extension}`;
+}
+
+function getFileExtension(fileName: string) {
+  const match = fileName.match(/\.[a-z0-9]+$/i);
+
+  return match ? match[0].toLowerCase() : "";
 }
 
 function fileToDataUrl(file: File) {

@@ -111,6 +111,7 @@ export function MultiStepForm() {
   const [photoFiles, setPhotoFiles] = useState<Record<string, File>>({});
   const [submittedLead, setSubmittedLead] = useState<GardenBriefLead | null>(null);
   const [quizResult, setQuizResult] = useState<StyleQuizStoredResult | null>(null);
+  const [isCustomStyle, setIsCustomStyle] = useState(false);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -291,6 +292,7 @@ export function MultiStepForm() {
               setSubmittedLead(null);
               setForm(initialForm);
               setPhotoFiles({});
+              setIsCustomStyle(false);
               setStep(0);
             }}
           >
@@ -384,15 +386,35 @@ export function MultiStepForm() {
           <label>
             Preferred style
             <select
-              value={form.preferredStyle}
-              onChange={(event) => updateField("preferredStyle", event.target.value)}
+              value={isCustomStyle ? "Custom style" : form.preferredStyle}
+              onChange={(event) => {
+                if (event.target.value === "Custom style") {
+                  setIsCustomStyle(true);
+                  updateField("preferredStyle", "");
+                  return;
+                }
+
+                setIsCustomStyle(false);
+                updateField("preferredStyle", event.target.value);
+              }}
             >
               <option value="">Select a preferred style</option>
               {preferredStyles.map((style) => (
                 <option key={style}>{style}</option>
               ))}
+              <option>Custom style</option>
             </select>
           </label>
+          {isCustomStyle ? (
+            <label>
+              Describe your preferred style
+              <input
+                value={form.preferredStyle}
+                onChange={(event) => updateField("preferredStyle", event.target.value)}
+                placeholder="For example: calm Japanese courtyard with dark timber and soft planting"
+              />
+            </label>
+          ) : null}
           <label>
             How much ongoing garden maintenance would you be comfortable with?
             <select

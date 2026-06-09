@@ -65,6 +65,14 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
     });
   }, [designVersion, lead, photoLabel, selectedMemory]);
 
+  const gardenMappingPrompt = useMemo(() => {
+    if (!lead || !selectedMemory) {
+      return "";
+    }
+
+    return buildGardenMappingPrompt(lead, selectedMemory, designVersion);
+  }, [designVersion, lead, selectedMemory]);
+
   function updatePlacement(feature: string, placement: string) {
     if (!lead || !selectedMemory) {
       return;
@@ -81,6 +89,32 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
 
     setLead(updatedLead);
     void updateLead(updatedLead);
+  }
+
+  async function copyPrompt() {
+    await navigator.clipboard.writeText(prompt);
+  }
+
+  async function copyGardenMappingPrompt() {
+    await navigator.clipboard.writeText(gardenMappingPrompt);
+  }
+
+  async function downloadPhoto(photo: NonNullable<GardenBriefLead["photos"]>[number]) {
+    const url = getPhotoUrl(photo);
+
+    if (!url) {
+      return;
+    }
+
+    await downloadUrl(url, buildPhotoDownloadName(photo));
+  }
+
+  async function downloadAllPhotos() {
+    const photos = lead?.photos ?? [];
+
+    for (const photo of photos) {
+      await downloadPhoto(photo);
+    }
   }
 
   if (!lead || !selectedMemory) {
@@ -107,6 +141,37 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
         </div>
         <p>{lead.status}</p>
       </div>
+
+      <article className="memory-panel gemini-prep-panel">
+        <div className="photo-download-header">
+          <div>
+            <p className="eyebrow">Gemini prep workflow</p>
+            <h3>Map the whole garden before generating views</h3>
+            <p>
+              Upload every labelled client photo into one Gemini conversation first,
+              then paste this master mapping prompt. Use the per-view prompt below
+              only after Gemini has understood the garden as one connected space.
+            </p>
+          </div>
+          <div className="gemini-prep-actions">
+            {lead.photos?.length ? (
+              <button className="button button-secondary" type="button" onClick={downloadAllPhotos}>
+                Download labelled photos
+              </button>
+            ) : null}
+            <button className="button button-secondary" type="button" onClick={copyGardenMappingPrompt}>
+              Copy mapping prompt
+            </button>
+          </div>
+        </div>
+        <ol className="gemini-workflow-list">
+          <li>Download the labelled garden photos from this lead.</li>
+          <li>Upload all views to Gemini in the same conversation.</li>
+          <li>Paste the mapping prompt so Gemini identifies boundaries, house position and camera angles.</li>
+          <li>Then generate each concept view using the Prompt Preview section below.</li>
+        </ol>
+        <pre className="prompt-preview prompt-preview-compact">{gardenMappingPrompt}</pre>
+      </article>
 
       <div className="memory-layout">
         <article className="memory-panel">
@@ -189,9 +254,76 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
               </select>
             </label>
           </div>
+          <div className="button-row">
+            <button className="button button-secondary" type="button" onClick={copyPrompt}>
+              Copy Gemini prompt
+            </button>
+          </div>
           <pre className="prompt-preview">{prompt}</pre>
         </article>
       </div>
+
+      <article className="memory-panel">
+        <div className="photo-download-header">
+          <div>
+            <h3>Client photos</h3>
+            <p>
+              Download labelled garden images for Gemini. Filenames use the
+              photo label followed by the photo ID.
+            </p>
+          </div>
+          {lead.photos?.length ? (
+            <button className="button button-secondary" type="button" onClick={downloadAllPhotos}>
+              Download all photos
+            </button>
+          ) : null}
+        </div>
+        {lead.photos?.length ? (
+          <div className="admin-photo-grid">
+            {lead.photos.map((photo) => {
+              const photoUrl = getPhotoUrl(photo);
+
+              return (
+                <article className="admin-photo-card" key={photo.id}>
+                  {photoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={photoUrl} alt={photo.label || photo.fileName} />
+                  ) : (
+                    <div className="proposal-image-placeholder">No preview available.</div>
+                  )}
+                  <div>
+                    <h4>{photo.label || "Unlabelled garden view"}</h4>
+                    <dl>
+                      <div>
+                        <dt>Download name</dt>
+                        <dd>{buildPhotoDownloadName(photo)}</dd>
+                      </div>
+                      <div>
+                        <dt>Original file</dt>
+                        <dd>{photo.fileName}</dd>
+                      </div>
+                      <div>
+                        <dt>Notes</dt>
+                        <dd>{photo.notes || "No notes added."}</dd>
+                      </div>
+                    </dl>
+                    <button
+                      className="button button-secondary"
+                      disabled={!photoUrl}
+                      type="button"
+                      onClick={() => downloadPhoto(photo)}
+                    >
+                      Download photo
+                    </button>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <p>No client photos have been uploaded for this lead yet.</p>
+        )}
+      </article>
 
       <article className="memory-panel">
         <h3>Locked feature placements</h3>
@@ -297,6 +429,119 @@ function getExcludedForVersion(lead: GardenBriefLead, versionFeatures: string[])
   return requestedFeatures.filter((feature) => !versionFeatures.includes(feature));
 }
 
+function buildGardenMappingPrompt(
+  lead: GardenBriefLead,
+  memory: DesignMemory,
+  designVersion: DesignVersion,
+) {
+  const photoSummary = lead.photos?.length
+    ? lead.photos
+        .map((photo, index) =>
+          `${index + 1}. ${photo.label || "Unlabelled view"} - file: ${buildPhotoDownloadName(photo)}${
+            photo.notes ? ` - notes: ${photo.notes}` : ""
+          }`,
+        )
+        .join("\n")
+    : "No uploaded photos are attached to this lead yet.";
+
+  const placements = Object.entries(memory.lockedFeaturePlacements).length
+    ? Object.entries(memory.lockedFeaturePlacements)
+        .map(([feature, placement]) => `- ${feature}: ${placement}`)
+        .join("\n")
+    : "- No locked placements have been set yet.";
+
+  const duplicateRules = memory.prohibitedDuplicates.length
+    ? memory.prohibitedDuplicates.map((rule) => `- ${rule}`).join("\n")
+    : "- Keep major features singular unless explicitly repeatable.";
+
+  return `You are preparing a coherent Anthēon Outdoor garden map from multiple customer photos.
+
+Do not redesign the garden yet.
+First, interpret all uploaded photos as one single garden space.
+Use the photo labels, notes and visible context to map camera angles, boundaries, house position, existing features and any uncertainties.
+
+Customer and project context:
+- Customer: ${lead.fullName}
+- Selected design version: ${designVersion}
+- Garden size: ${memory.gardenSize}
+- Garden shape: ${memory.gardenShape}
+- House position: ${memory.housePosition}
+- Existing features: ${formatList(memory.existingFeatures)}
+- Preferred style: ${memory.customerStyle}
+- Budget band: ${memory.budgetBand}
+- Planting maintenance level: ${memory.plantingMaintenance}
+- Planting colour scheme: ${memory.plantingColourScheme}
+- Preferred planting: ${formatList(memory.plantingPalette.preferredPlants)}
+- Avoid planting: ${formatList(memory.plantingPalette.avoidPlants)}
+
+Uploaded photo labels:
+${photoSummary}
+
+Locked feature placements:
+${placements}
+
+Duplicate prevention rules:
+${duplicateRules}
+
+Mapping task:
+1. Describe the overall garden layout as one connected space.
+2. Identify which uploaded photo shows each camera angle or boundary.
+3. Confirm where the house, patio, rear boundary, left boundary, right boundary and existing features appear.
+4. Flag any conflicts or uncertainties between photos.
+5. Confirm the feature placement map for this proposal version.
+6. State which selected features may not be visible from each camera angle, so they are not duplicated elsewhere.
+
+Important:
+- Preserve the real garden layout and camera perspective.
+- Do not invent extra premium features.
+- Do not duplicate pergolas, fire pits, kitchens, raised planter runs, water features, hot tub areas or seating zones.
+- If a feature is not visible in one view, keep it in its locked location rather than adding another one.
+- Keep this mapping consistent for every later image generation in this Gemini conversation.`;
+}
+
 function formatList(items: string[] | undefined) {
   return items?.length ? items.join(", ") : "None specified";
+}
+
+function getPhotoUrl(photo: NonNullable<GardenBriefLead["photos"]>[number]) {
+  return photo.publicUrl ?? photo.previewUrl ?? "";
+}
+
+function buildPhotoDownloadName(photo: NonNullable<GardenBriefLead["photos"]>[number]) {
+  const extension = getFileExtension(photo.fileName);
+  const label = photo.label || "garden-photo";
+
+  return `${slugify(label)}-${photo.id}${extension}`;
+}
+
+function getFileExtension(fileName: string) {
+  const match = fileName.match(/\.[a-z0-9]+$/i);
+
+  return match ? match[0].toLowerCase() : "";
+}
+
+function slugify(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+async function downloadUrl(url: string, fileName: string) {
+  try {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    triggerDownload(objectUrl, fileName);
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+  } catch {
+    triggerDownload(url, fileName);
+  }
+}
+
+function triggerDownload(url: string, fileName: string) {
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
