@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { mockLeads } from "@/data/content";
 import { loadLeads, updateLead } from "@/data/storage";
-import type { GardenBriefLead } from "@/data/types";
+import type { GardenBriefLead, ProposalVersionKey, VisualAnchorMemory } from "@/data/types";
 import { calculateBudgetFit } from "@/lib/budgetRules";
 import {
   createVersionDesignMemories,
@@ -18,7 +18,7 @@ const designVersions: DesignVersion[] = ["Within Budget", "Enhanced Design", "Dr
 export function AdminLeadDetail({ leadId }: { leadId: string }) {
   const [lead, setLead] = useState<GardenBriefLead | null>(null);
   const [designVersion, setDesignVersion] = useState<DesignVersion>("Within Budget");
-  const [photoLabel, setPhotoLabel] = useState("");
+  const [selectedPhotoId, setSelectedPhotoId] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -45,10 +45,20 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
     return getMemoryForVersion(lead, designVersion);
   }, [lead, designVersion]);
 
+  const selectedPhoto = useMemo(() => {
+    if (!lead?.photos?.length || !selectedPhotoId) {
+      return null;
+    }
+
+    return lead.photos.find((photo) => photo.id === selectedPhotoId) ?? null;
+  }, [lead, selectedPhotoId]);
+
   const prompt = useMemo(() => {
     if (!lead || !selectedMemory) {
       return "";
     }
+
+    const selectedPhotoLabel = selectedPhoto?.label || selectedPhoto?.fileName || selectedPhotoId;
 
     return buildGardenImagePrompt({
       designVersion,
@@ -61,16 +71,23 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
       style: lead.preferredStyle,
       customerNotes: lead.notes,
       designMemory: selectedMemory,
-      photoLabel,
+      photoLabel: selectedPhotoLabel,
+      currentPhoto: selectedPhoto,
+      visualAnchor: lead.visualAnchorMemory?.[getVersionKey(designVersion)] ?? null,
     });
-  }, [designVersion, lead, photoLabel, selectedMemory]);
+  }, [designVersion, lead, selectedMemory, selectedPhoto, selectedPhotoId]);
 
   const gardenMappingPrompt = useMemo(() => {
     if (!lead || !selectedMemory) {
       return "";
     }
 
-    return buildGardenMappingPrompt(lead, selectedMemory, designVersion);
+    return buildGardenMappingPrompt(
+      lead,
+      selectedMemory,
+      designVersion,
+      lead.visualAnchorMemory?.[getVersionKey(designVersion)] ?? null,
+    );
   }, [designVersion, lead, selectedMemory]);
 
   function updatePlacement(feature: string, placement: string) {
@@ -151,6 +168,8 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
               Upload every labelled client photo into one Gemini conversation first,
               then paste this master mapping prompt. Use the per-view prompt below
               only after Gemini has understood the garden as one connected space.
+              Once one concept is approved, lock it as the visual anchor in the
+              proposal pack before generating the remaining views.
             </p>
           </div>
           <div className="gemini-prep-actions">
@@ -168,7 +187,7 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
           <li>Download the labelled garden photos from this lead.</li>
           <li>Upload all views to Gemini in the same conversation.</li>
           <li>Paste the mapping prompt so Gemini identifies boundaries, house position and camera angles.</li>
-          <li>Then generate each concept view using the Prompt Preview section below.</li>
+          <li>Approve one strong concept as the visual anchor, then generate each remaining view below.</li>
         </ol>
         <pre className="prompt-preview prompt-preview-compact">{gardenMappingPrompt}</pre>
       </article>
@@ -227,6 +246,13 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
               <dt>Version-specific features</dt>
               <dd>{formatList(selectedMemory.versionFeatures)}</dd>
             </div>
+            <div>
+              <dt>Approved visual anchor</dt>
+              <dd>
+                {lead.visualAnchorMemory?.[getVersionKey(designVersion)]?.imageFileName ??
+                  "No anchor locked for this proposal version yet"}
+              </dd>
+            </div>
           </dl>
         </article>
 
@@ -246,11 +272,15 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
             </label>
             <label>
               Photo label / view
-              <select value={photoLabel} onChange={(event) => setPhotoLabel(event.target.value)}>
+              <select value={selectedPhotoId} onChange={(event) => setSelectedPhotoId(event.target.value)}>
                 <option value="">Select a photo view</option>
-                {photoOptions.map((label) => (
-                  <option key={label}>{label}</option>
-                ))}
+                {lead.photos?.length
+                  ? lead.photos.map((photo) => (
+                      <option key={photo.id} value={photo.id}>
+                        {photo.label || photo.fileName}
+                      </option>
+                    ))
+                  : photoOptions.map((label) => <option key={label}>{label}</option>)}
               </select>
             </label>
           </div>
@@ -429,10 +459,23 @@ function getExcludedForVersion(lead: GardenBriefLead, versionFeatures: string[])
   return requestedFeatures.filter((feature) => !versionFeatures.includes(feature));
 }
 
+function getVersionKey(designVersion: DesignVersion): ProposalVersionKey {
+  if (designVersion === "Enhanced Design") {
+    return "enhancedDesign";
+  }
+
+  if (designVersion === "Dream Version") {
+    return "dreamVersion";
+  }
+
+  return "withinBudget";
+}
+
 function buildGardenMappingPrompt(
   lead: GardenBriefLead,
   memory: DesignMemory,
   designVersion: DesignVersion,
+  visualAnchor: VisualAnchorMemory | null,
 ) {
   const photoSummary = lead.photos?.length
     ? lead.photos
@@ -453,10 +496,20 @@ function buildGardenMappingPrompt(
   const duplicateRules = memory.prohibitedDuplicates.length
     ? memory.prohibitedDuplicates.map((rule) => `- ${rule}`).join("\n")
     : "- Keep major features singular unless explicitly repeatable.";
+  const anchorSection = visualAnchor
+    ? `Approved visual anchor:
+- Version: ${visualAnchor.versionTitle}
+- Anchor image file: ${visualAnchor.imageFileName || "approved concept image"}
+- Anchor approved at: ${visualAnchor.approvedAt}
+- Placement lock notes:
+${visualAnchor.placementNotes}`
+    : `Approved visual anchor:
+- No visual anchor has been locked for this proposal version yet.
+- After the first strong concept is approved, use it as the design placement reference before generating the remaining views.`;
 
   return `You are preparing a coherent Anthēon Outdoor garden map from multiple customer photos.
 
-Do not redesign the garden yet.
+Do not redesign the garden yet. Do not generate any concept image yet.
 First, interpret all uploaded photos as one single garden space.
 Use the photo labels, notes and visible context to map camera angles, boundaries, house position, existing features and any uncertainties.
 
@@ -480,19 +533,26 @@ ${photoSummary}
 Locked feature placements:
 ${placements}
 
+${anchorSection}
+
 Duplicate prevention rules:
 ${duplicateRules}
 
 Mapping task:
-1. Describe the overall garden layout as one connected space.
-2. Identify which uploaded photo shows each camera angle or boundary.
-3. Confirm where the house, patio, rear boundary, left boundary, right boundary and existing features appear.
-4. Flag any conflicts or uncertainties between photos.
-5. Confirm the feature placement map for this proposal version.
-6. State which selected features may not be visible from each camera angle, so they are not duplicated elsewhere.
+1. Create a view registry using the exact uploaded filenames above.
+2. For each filename, identify the camera position, viewing direction, visible boundary, foreground, midground and background.
+3. Describe the overall garden layout as one connected space.
+4. Confirm where the house, patio, rear boundary, left boundary, right boundary and existing features appear.
+5. Flag any conflicts or uncertainties between photos, including any left/right ambiguity.
+6. Confirm the feature placement map for this proposal version.
+7. State which selected features may not be visible from each camera angle, so they are not duplicated elsewhere.
 
 Important:
 - Preserve the real garden layout and camera perspective.
+- When later editing a specific source image, use that source image only as the visual base. Treat the other uploaded photos as context only.
+- If an approved visual anchor exists, use that anchor as the design placement reference while preserving the current source photo as the camera/view reference.
+- Do not swap left and right boundaries between views.
+- Do not mirror, rotate into a different viewpoint, or replace a source view with another uploaded view.
 - Do not invent extra premium features.
 - Do not duplicate pergolas, fire pits, kitchens, raised planter runs, water features, hot tub areas or seating zones.
 - If a feature is not visible in one view, keep it in its locked location rather than adding another one.

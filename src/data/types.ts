@@ -40,6 +40,17 @@ export type ProposalImageAsset = {
   approved: boolean;
 };
 
+export type VisualAnchorMemory = {
+  versionKey: ProposalVersionKey;
+  versionTitle: string;
+  imageId?: string;
+  imageFileName?: string;
+  imageUrl?: string;
+  previewUrl?: string;
+  placementNotes: string;
+  approvedAt: string;
+};
+
 export type GardenPhotoLabel = {
   id: string;
   fileName: string;
@@ -101,6 +112,7 @@ export type GardenBriefLead = {
   proposalReviewNotes?: string;
   proposalSentAt?: string;
   proposalImages?: Partial<Record<ProposalVersionKey, ProposalImageAsset>>;
+  visualAnchorMemory?: Partial<Record<ProposalVersionKey, VisualAnchorMemory>>;
   approvedMustHaves?: string[];
   cautionMustHaves?: string[];
   excludedMustHaves?: string[];

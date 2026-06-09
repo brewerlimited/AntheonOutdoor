@@ -1797,6 +1797,43 @@ textarea {
   color: #5c3024;
 }
 
+.visual-anchor-panel {
+  background: rgba(35, 60, 47, 0.06);
+  border: 1px solid rgba(35, 60, 47, 0.14);
+  border-radius: var(--radius);
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.visual-anchor-panel.is-locked {
+  background: rgba(155, 122, 79, 0.1);
+  border-color: rgba(155, 122, 79, 0.28);
+}
+
+.visual-anchor-panel h4 {
+  color: var(--charcoal);
+  font-family: var(--serif);
+  font-size: 1.2rem;
+  font-weight: 400;
+}
+
+.visual-anchor-panel p {
+  font-size: 0.9rem;
+}
+
+.anchor-status {
+  background: rgba(255, 253, 248, 0.75);
+  border: 1px solid rgba(155, 122, 79, 0.2);
+  border-radius: 12px;
+  color: var(--green);
+  padding: 10px 12px;
+}
+
+.visual-anchor-panel textarea:disabled {
+  opacity: 0.58;
+}
+
 .image-upload-box {
   background: rgba(244, 239, 230, 0.56);
   border: 1px solid var(--line);

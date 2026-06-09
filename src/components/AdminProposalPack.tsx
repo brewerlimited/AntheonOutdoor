@@ -10,6 +10,7 @@ import type {
   ProposalImageStatus,
   ProposalStatus,
   ProposalVersionKey,
+  VisualAnchorMemory,
 } from "@/data/types";
 import { calculateBudgetFit } from "@/lib/budgetRules";
 import {
@@ -139,6 +140,24 @@ export function AdminProposalPack({ leadId }: { leadId: string }) {
     void updateLead(updatedLead);
   }
 
+  function updateVisualAnchor(versionKey: ProposalVersionKey, anchor: VisualAnchorMemory) {
+    if (!lead) {
+      return;
+    }
+
+    const updatedLead: GardenBriefLead = {
+      ...lead,
+      proposalStatus: "Images Added",
+      visualAnchorMemory: {
+        ...lead.visualAnchorMemory,
+        [versionKey]: anchor,
+      },
+    };
+
+    setLead(updatedLead);
+    void updateLead(updatedLead);
+  }
+
   if (!lead || !proposalPack) {
     return (
       <section className="section">
@@ -244,7 +263,9 @@ export function AdminProposalPack({ leadId }: { leadId: string }) {
           image={lead.proposalImages?.withinBudget}
           leadId={lead.id}
           onImageChange={updateProposalImage}
+          onVisualAnchorChange={updateVisualAnchor}
           style={lead.preferredStyle}
+          visualAnchor={lead.visualAnchorMemory?.withinBudget}
           version={proposalPack.withinBudget}
           versionKey="withinBudget"
         />
@@ -253,7 +274,9 @@ export function AdminProposalPack({ leadId }: { leadId: string }) {
           image={lead.proposalImages?.enhancedDesign}
           leadId={lead.id}
           onImageChange={updateProposalImage}
+          onVisualAnchorChange={updateVisualAnchor}
           style={lead.preferredStyle}
+          visualAnchor={lead.visualAnchorMemory?.enhancedDesign}
           version={proposalPack.enhancedDesign}
           versionKey="enhancedDesign"
         />
@@ -262,7 +285,9 @@ export function AdminProposalPack({ leadId }: { leadId: string }) {
           image={lead.proposalImages?.dreamVersion}
           leadId={lead.id}
           onImageChange={updateProposalImage}
+          onVisualAnchorChange={updateVisualAnchor}
           style={lead.preferredStyle}
+          visualAnchor={lead.visualAnchorMemory?.dreamVersion}
           version={proposalPack.dreamVersion}
           versionKey="dreamVersion"
         />
@@ -356,6 +381,8 @@ function ProposalVersionCard({
   image,
   leadId,
   onImageChange,
+  onVisualAnchorChange,
+  visualAnchor,
 }: {
   version: ProposalVersion;
   versionKey: ProposalVersionKey;
@@ -364,6 +391,8 @@ function ProposalVersionCard({
   image?: ProposalImageAsset;
   leadId: string;
   onImageChange: (versionKey: ProposalVersionKey, image: ProposalImageAsset) => void;
+  onVisualAnchorChange: (versionKey: ProposalVersionKey, anchor: VisualAnchorMemory) => void;
+  visualAnchor?: VisualAnchorMemory;
 }) {
   const currentImage = image ?? {
     imageNotes: "",
@@ -425,6 +454,13 @@ function ProposalVersionCard({
         }
         onUpload={uploadImages}
       />
+      <VisualAnchorPanel
+        anchor={visualAnchor}
+        image={currentImage}
+        onAnchorChange={(anchor) => onVisualAnchorChange(versionKey, anchor)}
+        version={version}
+        versionKey={versionKey}
+      />
       <BudgetRealityPanel budgetBand={budgetBand} result={budgetReality} />
       <p>{version.customerFriendlyDescription}</p>
       <dl>
@@ -451,6 +487,89 @@ function ProposalVersionCard({
       </dl>
     </article>
   );
+}
+
+function VisualAnchorPanel({
+  anchor,
+  image,
+  onAnchorChange,
+  version,
+  versionKey,
+}: {
+  anchor?: VisualAnchorMemory;
+  image: ProposalImageAsset;
+  onAnchorChange: (anchor: VisualAnchorMemory) => void;
+  version: ProposalVersion;
+  versionKey: ProposalVersionKey;
+}) {
+  const selectedImageUrl = image.previewUrl ?? image.imageUrl;
+  const defaultNotes = buildDefaultAnchorNotes(version);
+  const placementNotes = anchor?.placementNotes ?? defaultNotes;
+
+  function saveAnchor(nextNotes = placementNotes) {
+    onAnchorChange({
+      versionKey,
+      versionTitle: version.title,
+      imageId: image.id,
+      imageFileName: image.fileName,
+      imageUrl: image.imageUrl,
+      previewUrl: image.previewUrl,
+      placementNotes: nextNotes,
+      approvedAt: anchor?.approvedAt ?? new Date().toISOString(),
+    });
+  }
+
+  return (
+    <aside className={`visual-anchor-panel ${anchor ? "is-locked" : ""}`}>
+      <div>
+        <p className="eyebrow">Visual anchor</p>
+        <h4>{anchor ? "Approved placement lock" : "Lock the first good image"}</h4>
+        <p>
+          Use one approved concept image as the placement reference for every
+          later Gemini view in this proposal version.
+        </p>
+      </div>
+      {anchor ? (
+        <p className="anchor-status">
+          Locked from {anchor.imageFileName || "selected concept image"} on{" "}
+          {formatDate(anchor.approvedAt)}.
+        </p>
+      ) : null}
+      <label>
+        Anchor placement notes
+        <textarea
+          disabled={!selectedImageUrl}
+          rows={5}
+          value={placementNotes}
+          onChange={(event) => saveAnchor(event.target.value)}
+          placeholder="Describe exactly where the pergola, seating, lawn, planters and key features are locked."
+        />
+      </label>
+      <button
+        className="button button-secondary"
+        disabled={!selectedImageUrl}
+        type="button"
+        onClick={() => saveAnchor()}
+      >
+        {anchor ? "Update visual anchor" : "Use selected image as anchor"}
+      </button>
+    </aside>
+  );
+}
+
+function buildDefaultAnchorNotes(version: ProposalVersion) {
+  const placements = Object.entries(version.featurePlacements ?? {});
+
+  if (!placements.length) {
+    return "Use the approved concept image as the visual source of truth. Keep major features in the same positions across all later views. If a feature is outside a camera angle, omit it from that view rather than moving or duplicating it.";
+  }
+
+  return [
+    "Use the approved concept image as the visual source of truth for this proposal version.",
+    ...placements.map(([feature, placement]) => `${feature}: locked to ${placement}.`),
+    "Do not move or duplicate these features in later generated views.",
+    "If a locked feature is outside a camera angle, omit it from that view rather than relocating it.",
+  ].join("\n");
 }
 
 function BudgetRealityPanel({
