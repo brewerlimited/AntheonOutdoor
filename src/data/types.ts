@@ -113,6 +113,7 @@ export type GardenBriefLead = {
   proposalSentAt?: string;
   proposalImages?: Partial<Record<ProposalVersionKey, ProposalImageAsset>>;
   visualAnchorMemory?: Partial<Record<ProposalVersionKey, VisualAnchorMemory>>;
+  aiViewGuardrails?: string;
   approvedMustHaves?: string[];
   cautionMustHaves?: string[];
   excludedMustHaves?: string[];

@@ -14,6 +14,7 @@ type GardenImagePromptInput = {
   photoLabel: string;
   currentPhoto?: GardenPhotoLabel | null;
   visualAnchor?: VisualAnchorMemory | null;
+  aiViewGuardrails?: string;
 };
 
 export function buildGardenImagePrompt({
@@ -28,7 +29,11 @@ export function buildGardenImagePrompt({
   photoLabel,
   currentPhoto,
   visualAnchor,
+  aiViewGuardrails,
 }: GardenImagePromptInput) {
+  const labelledSourceFileName = currentPhoto
+    ? buildLabelledPhotoFileName(currentPhoto)
+    : photoLabel || "selected garden photo";
   const placements = Object.entries(designMemory.lockedFeaturePlacements)
     .map(([feature, placement]) => `- ${feature}: ${placement}`)
     .join("\n");
@@ -51,7 +56,9 @@ export function buildGardenImagePrompt({
   return `Create a realistic, buildable Anthēon Outdoor garden concept for the ${designVersion} proposal.
 
 SOURCE IMAGE LOCK - CRITICAL:
-- Use the uploaded source image "${currentPhoto?.fileName || photoLabel || "selected garden photo"}" as the visual base for this generation.
+- Use the labelled admin export "${labelledSourceFileName}" as the visual base and file of truth for this generation.
+- The customer's original upload filename is metadata only: ${currentPhoto?.fileName || "Not available"}.
+- If Gemini asks for the "original file", use the labelled admin export above. Do not ask for or rely on a differently named customer-original file.
 - Source photo label: ${currentPhoto?.label || photoLabel || "Unlabelled garden view"}.
 - Source photo notes: ${currentPhoto?.notes || "No source photo notes provided."}
 - Other uploaded photos are context only. Do not use another uploaded photo as the base image.
@@ -60,6 +67,15 @@ SOURCE IMAGE LOCK - CRITICAL:
 - Do not turn a boundary view into a view from the house, or a view from the house into a boundary view.
 - If the phone photo orientation is sideways or contains EXIF rotation, correct only the orientation needed for viewing; do not redesign the camera angle or mirror the garden.
 - The result should look like this exact source photo has been carefully redesigned, not like a newly invented garden.
+
+OPEN AREA AND ACCESS LOCK:
+- Identify which edges in the source photo are real boundaries and which are open sides, access routes, house returns, patio edges, paths, doors, shed fronts or circulation areas.
+- Do not turn an open side or circulation route into a closed boundary.
+- Do not add new fencing, raised planters, screening or boundary planting to an open side unless the design memory explicitly locks that feature there.
+- Preserve visible side access, door access, shed access, patio circulation and open routes beside the house.
+- In a view looking back toward the house, do not assume the left or right edge of the image is a boundary. Only treat it as a boundary if the source photo clearly shows a fence, wall or boundary line.
+- If an area reads as open space beside the house, keep it open and functional.
+- Admin view guardrails: ${aiViewGuardrails || "No additional admin view guardrails provided."}
 
 ${buildVisualAnchorPromptSection(visualAnchor)}
 
@@ -117,6 +133,23 @@ Design quality:
 
 function list(items: string[]) {
   return items.length ? items.join(", ") : "None specified";
+}
+
+function buildLabelledPhotoFileName(photo: GardenPhotoLabel) {
+  const extension = getFileExtension(photo.fileName);
+  const label = photo.label || "garden-photo";
+
+  return `${slugify(label)}-${photo.id}${extension}`;
+}
+
+function getFileExtension(fileName: string) {
+  const match = fileName.match(/\.[a-z0-9]+$/i);
+
+  return match ? match[0].toLowerCase() : "";
+}
+
+function slugify(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
 function buildVisualAnchorPromptSection(visualAnchor?: VisualAnchorMemory | null) {

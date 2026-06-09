@@ -74,6 +74,7 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
       photoLabel: selectedPhotoLabel,
       currentPhoto: selectedPhoto,
       visualAnchor: lead.visualAnchorMemory?.[getVersionKey(designVersion)] ?? null,
+      aiViewGuardrails: lead.aiViewGuardrails,
     });
   }, [designVersion, lead, selectedMemory, selectedPhoto, selectedPhotoId]);
 
@@ -89,6 +90,20 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
       lead.visualAnchorMemory?.[getVersionKey(designVersion)] ?? null,
     );
   }, [designVersion, lead, selectedMemory]);
+
+  function updateAiViewGuardrails(value: string) {
+    if (!lead) {
+      return;
+    }
+
+    const updatedLead: GardenBriefLead = {
+      ...lead,
+      aiViewGuardrails: value,
+    };
+
+    setLead(updatedLead);
+    void updateLead(updatedLead);
+  }
 
   function updatePlacement(feature: string, placement: string) {
     if (!lead || !selectedMemory) {
@@ -190,6 +205,21 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
           <li>Approve one strong concept as the visual anchor, then generate each remaining view below.</li>
         </ol>
         <pre className="prompt-preview prompt-preview-compact">{gardenMappingPrompt}</pre>
+      </article>
+
+      <article className="memory-panel ai-guardrail-panel">
+        <p className="eyebrow">AI view guardrails</p>
+        <h3>Protect open sides and circulation routes</h3>
+        <p>
+          Add corrections Gemini must respect before generating more views. Use
+          this for issues such as open sides being mistaken for boundaries.
+        </p>
+        <textarea
+          rows={4}
+          value={lead.aiViewGuardrails ?? ""}
+          onChange={(event) => updateAiViewGuardrails(event.target.value)}
+          placeholder="Example: In the view looking back to the house, the right side of the image is open house-side access/circulation, not a boundary. Do not close it with fencing, raised planters or screening."
+        />
       </article>
 
       <div className="memory-layout">
@@ -480,7 +510,9 @@ function buildGardenMappingPrompt(
   const photoSummary = lead.photos?.length
     ? lead.photos
         .map((photo, index) =>
-          `${index + 1}. ${photo.label || "Unlabelled view"} - file: ${buildPhotoDownloadName(photo)}${
+          `${index + 1}. ${photo.label || "Unlabelled view"} - labelled admin export/file of truth: ${buildPhotoDownloadName(
+            photo,
+          )} - customer original filename for reference only: ${photo.fileName}${
             photo.notes ? ` - notes: ${photo.notes}` : ""
           }`,
         )
@@ -526,9 +558,15 @@ Customer and project context:
 - Planting colour scheme: ${memory.plantingColourScheme}
 - Preferred planting: ${formatList(memory.plantingPalette.preferredPlants)}
 - Avoid planting: ${formatList(memory.plantingPalette.avoidPlants)}
+- Admin AI view guardrails: ${lead.aiViewGuardrails || "No additional admin view guardrails provided."}
 
 Uploaded photo labels:
 ${photoSummary}
+
+File naming rule:
+- Use the labelled admin export filenames above as the source-of-truth files for mapping and generation.
+- The customer original filenames are included only for reference.
+- If asked for the original file, use the labelled admin export downloaded from Anthēon Admin.
 
 Locked feature placements:
 ${placements}
@@ -540,7 +578,7 @@ ${duplicateRules}
 
 Mapping task:
 1. Create a view registry using the exact uploaded filenames above.
-2. For each filename, identify the camera position, viewing direction, visible boundary, foreground, midground and background.
+2. For each filename, identify the camera position, viewing direction, visible boundary, open/non-boundary edges, access routes, foreground, midground and background.
 3. Describe the overall garden layout as one connected space.
 4. Confirm where the house, patio, rear boundary, left boundary, right boundary and existing features appear.
 5. Flag any conflicts or uncertainties between photos, including any left/right ambiguity.
@@ -551,6 +589,8 @@ Important:
 - Preserve the real garden layout and camera perspective.
 - When later editing a specific source image, use that source image only as the visual base. Treat the other uploaded photos as context only.
 - If an approved visual anchor exists, use that anchor as the design placement reference while preserving the current source photo as the camera/view reference.
+- Preserve open sides, side access, patio circulation, door access and shed access. Do not close them with new fences, raised planters, screening or boundary planting unless explicitly requested.
+- Do not treat the edge of the image as a boundary unless the source photo clearly shows a real boundary line, fence or wall.
 - Do not swap left and right boundaries between views.
 - Do not mirror, rotate into a different viewpoint, or replace a source view with another uploaded view.
 - Do not invent extra premium features.
