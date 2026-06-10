@@ -93,6 +93,7 @@ export type LayoutConceptStatus = "Draft" | "Shortlisted" | "Rejected" | "Select
 export type LayoutConcept = {
   id: "A" | "B" | "C";
   conceptName: string;
+  image?: ProposalImageAsset;
   designIntent: string;
   layoutSummary: string;
   keyFeatures: string;

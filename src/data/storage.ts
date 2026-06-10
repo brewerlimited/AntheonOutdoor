@@ -1,4 +1,4 @@
-import type { GardenBriefLead, ProposalImageAsset, ProposalVersionKey } from "./types";
+import type { GardenBriefLead, LayoutConcept, ProposalImageAsset, ProposalVersionKey } from "./types";
 import { isSupabaseConfigured, supabase } from "@/lib/supabase/client";
 import { buildProposalPack } from "@/lib/proposalBuilder";
 
@@ -189,6 +189,72 @@ export async function uploadProposalImageFiles({
     storageBucket: selectedImage.storageBucket,
     storagePath: selectedImage.storagePath,
     imageStatus: "Generated Manually" as const,
+  };
+}
+
+export async function uploadLayoutConceptImageFile({
+  leadId,
+  conceptId,
+  file,
+  currentImage,
+}: {
+  leadId: string;
+  conceptId: LayoutConcept["id"];
+  file: File;
+  currentImage?: ProposalImageAsset;
+}) {
+  const id = crypto.randomUUID();
+  const fallbackDataUrl = await fileToDataUrl(file);
+  const notes = currentImage?.imageNotes || "Gemini layout concept reference.";
+
+  if (!isSupabaseConfigured() || !supabase) {
+    return {
+      ...createProposalImageAsset({
+        id,
+        file,
+        imageUrl: fallbackDataUrl,
+        previewUrl: fallbackDataUrl,
+      }),
+      imageNotes: notes,
+      approved: currentImage?.approved ?? false,
+    };
+  }
+
+  const storagePath = `${leadId}/layout-concepts/${conceptId}/${id}-${safeFileName(file.name)}`;
+  const { error } = await supabase.storage
+    .from(PROPOSAL_IMAGES_BUCKET)
+    .upload(storagePath, file, {
+      contentType: file.type || undefined,
+      upsert: true,
+    });
+
+  if (error) {
+    console.warn("Supabase layout concept image upload failed; using local preview.", error.message);
+    return {
+      ...createProposalImageAsset({
+        id,
+        file,
+        imageUrl: fallbackDataUrl,
+        previewUrl: fallbackDataUrl,
+      }),
+      imageNotes: notes,
+      approved: currentImage?.approved ?? false,
+    };
+  }
+
+  const publicUrl = getPublicStorageUrl(PROPOSAL_IMAGES_BUCKET, storagePath);
+
+  return {
+    ...createProposalImageAsset({
+      id,
+      file,
+      imageUrl: publicUrl,
+      previewUrl: publicUrl,
+      storageBucket: PROPOSAL_IMAGES_BUCKET,
+      storagePath,
+    }),
+    imageNotes: notes,
+    approved: currentImage?.approved ?? false,
   };
 }
 

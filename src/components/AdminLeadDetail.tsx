@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { mockLeads } from "@/data/content";
-import { loadLeads, updateLead } from "@/data/storage";
+import { loadLeads, updateLead, uploadLayoutConceptImageFile } from "@/data/storage";
 import type {
   FeaturePlacementNote,
   GardenBriefLead,
@@ -81,6 +81,7 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
   const [lead, setLead] = useState<GardenBriefLead | null>(null);
   const [designVersion, setDesignVersion] = useState<DesignVersion>("Within Budget");
   const [selectedPhotoId, setSelectedPhotoId] = useState("");
+  const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -324,6 +325,50 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
     );
 
     updateLeadState({ layoutConcepts: concepts });
+  }
+
+  async function updateConceptImage(conceptId: LayoutConcept["id"], files: FileList | null) {
+    const file = files?.[0];
+
+    if (!lead || !file) {
+      return;
+    }
+
+    const concept = getLayoutConcepts(lead).find((item) => item.id === conceptId);
+    const image = await uploadLayoutConceptImageFile({
+      leadId: lead.id,
+      conceptId,
+      file,
+      currentImage: concept?.image,
+    });
+
+    updateConcept(conceptId, { image });
+  }
+
+  function updateConceptImageField(
+    conceptId: LayoutConcept["id"],
+    updates: Partial<ProposalImageAsset>,
+  ) {
+    if (!lead) {
+      return;
+    }
+
+    const concept = getLayoutConcepts(lead).find((item) => item.id === conceptId);
+
+    if (!concept) {
+      return;
+    }
+
+    updateConcept(conceptId, {
+      image: {
+        ...(concept.image ?? {
+          imageNotes: "",
+          imageStatus: "Not Started",
+          approved: false,
+        }),
+        ...updates,
+      },
+    });
   }
 
   function updateFinalLayoutField(
@@ -889,6 +934,77 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
                   onChange={(event) => updateConcept(concept.id, { conceptName: event.target.value })}
                 />
               </label>
+              <div className="layout-concept-image-panel">
+                <div className="layout-concept-image-frame">
+                  {concept.image?.imageUrl || concept.image?.previewUrl ? (
+                    <>
+                      <img
+                        alt={`${concept.conceptName || `Concept ${concept.id}`} reference`}
+                        src={concept.image.imageUrl || concept.image.previewUrl}
+                      />
+                      <button
+                        aria-label={`Expand Concept ${concept.id} image`}
+                        className="concept-image-expand-button"
+                        type="button"
+                        onClick={() =>
+                          setExpandedImageUrl(concept.image?.imageUrl || concept.image?.previewUrl || null)
+                        }
+                      >
+                        ↗
+                      </button>
+                    </>
+                  ) : (
+                    <p>Upload the Gemini layout image for this concept.</p>
+                  )}
+                </div>
+                <label>
+                  Gemini concept image
+                  <input
+                    accept="image/*"
+                    type="file"
+                    onChange={(event) => void updateConceptImage(concept.id, event.target.files)}
+                  />
+                </label>
+                <div className="field-grid">
+                  <label>
+                    Image status
+                    <select
+                      value={concept.image?.imageStatus ?? "Not Started"}
+                      onChange={(event) =>
+                        updateConceptImageField(concept.id, {
+                          imageStatus: event.target.value as ProposalImageAsset["imageStatus"],
+                        })
+                      }
+                    >
+                      <option>Not Started</option>
+                      <option>Generated Manually</option>
+                      <option>Needs Regeneration</option>
+                      <option>Approved</option>
+                    </select>
+                  </label>
+                  <label className="review-check">
+                    <input
+                      checked={Boolean(concept.image?.approved)}
+                      type="checkbox"
+                      onChange={(event) =>
+                        updateConceptImageField(concept.id, { approved: event.target.checked })
+                      }
+                    />
+                    Reference approved
+                  </label>
+                </div>
+                <label>
+                  Image notes
+                  <textarea
+                    rows={2}
+                    value={concept.image?.imageNotes ?? ""}
+                    onChange={(event) =>
+                      updateConceptImageField(concept.id, { imageNotes: event.target.value })
+                    }
+                    placeholder="What this concept image gets right or needs changing."
+                  />
+                </label>
+              </div>
               <label>
                 Design intent
                 <textarea
@@ -1432,6 +1548,28 @@ export function AdminLeadDetail({ leadId }: { leadId: string }) {
           ))}
         </ul>
       </article>
+
+      {expandedImageUrl ? (
+        <div
+          aria-modal="true"
+          className="image-lightbox"
+          role="dialog"
+          onClick={() => setExpandedImageUrl(null)}
+        >
+          <button
+            aria-label="Close expanded image"
+            className="image-lightbox-close"
+            type="button"
+            onClick={() => setExpandedImageUrl(null)}
+          >
+            ×
+          </button>
+          <figure onClick={(event) => event.stopPropagation()}>
+            <img src={expandedImageUrl} alt="Expanded layout concept" />
+            <figcaption>Layout concept reference</figcaption>
+          </figure>
+        </div>
+      ) : null}
     </section>
   );
 }

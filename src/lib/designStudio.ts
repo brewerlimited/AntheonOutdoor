@@ -22,6 +22,7 @@ export const defaultLayoutConcepts: LayoutConcept[] = [
   {
     id: "A",
     conceptName: "Concept A",
+    image: undefined,
     designIntent: "",
     layoutSummary: "",
     keyFeatures: "",
@@ -35,6 +36,7 @@ export const defaultLayoutConcepts: LayoutConcept[] = [
   {
     id: "B",
     conceptName: "Concept B",
+    image: undefined,
     designIntent: "",
     layoutSummary: "",
     keyFeatures: "",
@@ -48,6 +50,7 @@ export const defaultLayoutConcepts: LayoutConcept[] = [
   {
     id: "C",
     conceptName: "Concept C",
+    image: undefined,
     designIntent: "",
     layoutSummary: "",
     keyFeatures: "",

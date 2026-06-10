@@ -566,7 +566,7 @@ p {
   width: 88px;
 }
 
-.image-expand-button {
+.concept-image-expand-button {
   align-items: center;
   backdrop-filter: blur(12px);
   background: rgba(20, 28, 23, 0.58);
@@ -1741,6 +1741,58 @@ textarea {
 .concept-card-header select {
   min-height: 38px;
   padding: 0 10px;
+}
+
+.layout-concept-image-panel {
+  background: rgba(244, 240, 231, 0.46);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.layout-concept-image-frame {
+  align-items: center;
+  aspect-ratio: 4 / 3;
+  background: linear-gradient(135deg, rgba(255, 253, 248, 0.86), rgba(214, 204, 184, 0.55));
+  border: 1px dashed rgba(37, 34, 28, 0.22);
+  border-radius: 14px;
+  display: flex;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.layout-concept-image-frame img {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.layout-concept-image-frame p {
+  color: var(--muted);
+  margin: 0;
+  max-width: 230px;
+  padding: 18px;
+  text-align: center;
+}
+
+.image-expand-button {
+  align-items: center;
+  background: rgba(18, 34, 26, 0.88);
+  border: 1px solid rgba(255, 253, 248, 0.32);
+  border-radius: 999px;
+  color: var(--paper);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 1.1rem;
+  height: 42px;
+  justify-content: center;
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  width: 42px;
 }
 
 .plan-sketch-panel {
